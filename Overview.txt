@@ -1,0 +1,57 @@
+1. Executive Summary
+Veritas AI is an agentic development tool that brings "NASA-grade" reliability to everyday code. It takes standard Python algorithms as input, translates them into the Lean 4 formal verification language, and mathematically proves they are bug-free. If the proof fails, the system uses the mathematical error to autonomously diagnose and fix the Python bug.
+The "Winning" Narrative: "We are moving software development from 'It looks like it works' (Testing) to 'It is mathematically impossible for it to fail' (Verification)."
+
+2. Demo Scenario: The "Billion Dollar Bug"
+The demo will be a simple "Bank Transfer" function or "Server Access" script.
+1. The Setup (The Problem)
+You paste a Python function transfer_funds(users, amount) that looks correct but has a subtle bug (e.g., allowing negative transfers or integer overflow).
+Narrative: "This code passed all unit tests. But in production, it would bankrupt the company."
+2. The Innovation (The Solution)
+Veritas AI scans it. The "Translator Agent" converts it to Lean.
+The "Verifier Agent" fails.
+The Climax: The "Fixer Agent" says: "Mathematical Proof Failed: Variable balance can be negative. Rewriting Python code to enforce non-negative constraint."
+3. The Result (The Impact)
+The system outputs the proven Python code.
+Closing Line: "We just automated the work of a security auditor."
+
+3. Product Requirements Document (PRD)
+A. System Architecture (The Stack)
+Frontend: Next.js or Streamlit (Keep it dead simple. One input box, one output pane).
+Backend: Python (FastAPI). This acts as the "Controller."
+The "Brain": Gemini 3 Pro (via Google AI Studio API).
+The "Judge": Lean 4 (running locally on the server/container).
+B. The Agentic Workflow (The Logic You Will "Vibe Code")
+We need three distinct AI "personas" or prompts.
+Agent 1: The Translator
+Goal: Convert Python logic to Lean 4 syntax.
+Input: Python Code.
+Output: A .lean file containing the function definition and the theorem statement.
+Vibe Requirement: It must include "Chain of Thought" comments explaining why it chose specific Lean types.
+Agent 2: The Verifier (The Tool User)
+Goal: Run the compiler and parse the result.
+Action: Executes lean file.lean via subprocess.
+Output:
+If Success: Return "Verified".
+If Fail: Capture the specific error message (e.g., tactic 'simp' failed).
+Agent 3: The Fixer (The Reasoner)
+Goal: Close the loop.
+Input: Original Python + Lean Error Message.
+Reasoning: "The proof failed because the Python loop range is range(n) but the list access uses i+1, causing an overflow."
+Output: NEW Python code + Updated Lean Proof.
+C. Scope Constraints (Crucial for Vibe Coding)
+Do Not Support: Classes, complex libraries (Pandas/NumPy), or async/await.
+Support Only:
+Basic Data Types: Int, List, String, Bool.
+Control Flow: if, else, for, while.
+Target Domain: Sorting algorithms, Search algorithms, Basic Arithmetic (GCD, Fibonacci).
+
+Action Plan to De-Risk
+Don't over-engineer the math. The judges are likely not Lean experts. They care about the result (fixed Python code).
+Focus on the "Red/Green" Visuals.
+State 1: Big Red Banner "UNVERIFIED / VULNERABLE".
+State 2: The AI working (show the steps!).
+State 3: Big Green Badge "MATHEMATICALLY VERIFIED".
+Architecture Diagram: The criteria explicitly asks for this (10%). Draw a diagram showing: User Code -> Gemini (Translator) -> Lean Compiler (Judge) -> Gemini (Fixer) -> Final Code.
+
+
