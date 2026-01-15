@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import Header from "../components/Header";
 import StatusBanner from "../components/StatusBanner";
 import CodeEditor from "../components/CodeEditor";
-import LoggingConsole from "../components/Console";
-import { CheckCircle, AlertOctagon, ChevronDown, ChevronUp, Github, FileCode } from "lucide-react";
+import ThinkingProcess from "../components/ThinkingProcess"; // New Component
+import { ChevronDown, ChevronUp, Github, FileCode } from "lucide-react";
 
 export default function Home() {
   const [mode, setMode] = useState<"single" | "repo">("single");
@@ -16,61 +15,113 @@ export default function Home() {
   // Single File State
   const [code, setCode] = useState<string>("");
   const [verifiedCode, setVerifiedCode] = useState<string>("");
-  const [logs, setLogs] = useState<string[]>([]);
 
   // Repo State
   const [repoUrl, setRepoUrl] = useState<string>("");
   const [repoResults, setRepoResults] = useState<any[]>([]);
 
+  // Shared Thinking State
+  const [thinkingLogs, setThinkingLogs] = useState<{ status: string; message: string }[]>([]);
+
   const runSingleVerification = async () => {
     setStatus("scanning");
-    setLogs(["Initiating Argus Audit Protocol..."]);
+    setThinkingLogs([]);
     setVerifiedCode("");
 
     try {
-      const response = await axios.post("http://127.0.0.1:8000/audit", {
-        python_code: code
+      const response = await fetch("http://127.0.0.1:8000/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ python_code: code })
       });
 
-      const data = response.data;
-      if (data.status === "verified") {
-        setStatus("verified");
-        setVerifiedCode(data.fixed_code);
-        setLogs(prev => [...prev, ...data.logs, "Verification Complete. System Secure."]);
-      } else {
-        setStatus("failed");
-        setLogs(prev => [...prev, ...data.logs, "Verification Failed. Manual Intervention Required."]);
+      if (!response.body) throw new Error("No response body");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n").filter(line => line.trim() !== "");
+
+        for (const line of lines) {
+          try {
+            const event = JSON.parse(line);
+
+            if (event.status === "success") {
+              // Final Result
+              setStatus(event.result.status);
+              setVerifiedCode(event.result.fixed_code);
+              setThinkingLogs(prev => [...prev, { status: "success", message: "Verification Protocol Complete." }]);
+            } else {
+              // Thinking Log
+              setThinkingLogs(prev => [...prev, { status: event.status, message: event.message }]);
+            }
+          } catch (e) {
+            console.error("Error parsing stream:", e);
+          }
+        }
       }
     } catch (error) {
       console.error(error);
       setStatus("failed");
-      setLogs(prev => [...prev, "Critical Error: Connection to verification engine lost."]);
+      setThinkingLogs(prev => [...prev, { status: "error", message: "Connection Terminated Unexpectedly." }]);
     }
   };
 
   const runRepoVerification = async () => {
     setStatus("scanning");
-    setLogs([`Cloning repository: ${repoUrl}...`, "Analyzing file structure...", "Triaging critical files..."]);
+    setThinkingLogs([]);
     setRepoResults([]);
 
     try {
-      const response = await axios.post("http://127.0.0.1:8000/audit_repo", {
-        repo_url: repoUrl
+      const response = await fetch("http://127.0.0.1:8000/audit_repo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_url: repoUrl })
       });
 
-      const data = response.data;
-      if (data.status === "complete") {
-        setRepoResults(data.results);
-        setStatus("verified"); // Or 'complete'
-        setLogs(prev => [...prev, "Repository Scan Complete."]);
-      } else {
-        setStatus("failed");
-        setLogs(prev => [...prev, `Scan Failed: ${data.message}`]);
+      if (!response.body) throw new Error("No response body");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n").filter(line => line.trim() !== "");
+
+        for (const line of lines) {
+          try {
+            const event = JSON.parse(line);
+
+            if (event.status === "success") {
+              // Individual File Success
+              setRepoResults(prev => [...prev, event.result]);
+              setThinkingLogs(prev => [...prev, { status: "success", message: `File Verified: ${event.result.filename}` }]);
+            } else if (event.status === "complete") {
+              // Full Scan Complete
+              setStatus("verified");
+              setThinkingLogs(prev => [...prev, { status: "success", message: "Repository Audit Complete." }]);
+            } else if (event.status === "error") {
+              setStatus("failed");
+              setThinkingLogs(prev => [...prev, { status: "error", message: event.message }]);
+            } else {
+              // Thinking Logs
+              setThinkingLogs(prev => [...prev, { status: event.status, message: event.message }]);
+            }
+          } catch (e) {
+            console.error("Error parsing stream:", e);
+          }
+        }
       }
     } catch (error) {
       console.error(error);
       setStatus("failed");
-      setLogs(prev => [...prev, "Critical Error: Repository audit failed."]);
+      setThinkingLogs(prev => [...prev, { status: "error", message: "Repository Audit Failed." }]);
     }
   };
 
@@ -103,19 +154,19 @@ export default function Home() {
         {mode === "single" && (
           <div className="grid grid-cols-2 gap-8 flex-1">
             <CodeEditor
-              title="VULNERABLE CODE [PYTHON]"
-              code={code}
+              label="VULNERABLE CODE [PYTHON]"
+              value={code}
               onChange={setCode}
               readOnly={false}
             />
             <div className="flex flex-col space-y-6 h-full">
               <CodeEditor
-                title="VERIFIED CODE [LEAN 4]"
-                code={verifiedCode}
+                label="VERIFIED CODE [LEAN 4]"
+                value={verifiedCode}
                 readOnly={true}
-                isVerified={true}
               />
-              <LoggingConsole logs={logs} />
+              {/* Replaced Console with ThinkingProcess */}
+              <ThinkingProcess logs={thinkingLogs} />
             </div>
           </div>
         )}
@@ -137,14 +188,15 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Thinking Process for Repo Mode */}
+            <ThinkingProcess logs={thinkingLogs} />
+
             {/* File Cards */}
             <div className="space-y-4">
               {repoResults.map((result, idx) => (
                 <FileResultCard key={idx} result={result} />
               ))}
             </div>
-
-            <LoggingConsole logs={logs} />
           </div>
         )}
 
@@ -205,15 +257,14 @@ function FileResultCard({ result }: { result: any }) {
           >
             <div className="grid grid-cols-2 gap-4 p-4 h-96">
               <CodeEditor
-                title="ORIGINAL"
-                code={result.original_code}
+                label="ORIGINAL"
+                value={result.original_code}
                 readOnly={true}
               />
               <CodeEditor
-                title={isVerified ? "VERIFIED FIX" : "FAILED FIX"}
-                code={result.fixed_code}
+                label={isVerified ? "VERIFIED FIX" : "FAILED FIX"}
+                value={result.fixed_code}
                 readOnly={true}
-                isVerified={isVerified}
               />
             </div>
             <div className="p-4 bg-black/50 border-t border-gray-800 text-xs text-gray-400 font-mono">
