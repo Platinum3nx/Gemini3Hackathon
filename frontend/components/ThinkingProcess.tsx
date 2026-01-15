@@ -11,7 +11,7 @@ export default function ThinkingProcess({ logs }: ThinkingProcessProps) {
     const bottomRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        bottomRef.current?.scrollIntoView();
     }, [logs]);
 
     const getIcon = (status: string) => {

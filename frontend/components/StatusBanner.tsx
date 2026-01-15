@@ -4,10 +4,11 @@ import { motion } from "framer-motion";
 import { CheckCircle, AlertOctagon, Loader2 } from "lucide-react";
 
 interface StatusBannerProps {
-    status: "unverified" | "verified" | "failed" | "scanning";
+    status: "unverified" | "verified" | "failed" | "scanning" | "patched";
+    isLoading?: boolean;
 }
 
-export default function StatusBanner({ status }: StatusBannerProps) {
+export default function StatusBanner({ status, isLoading }: StatusBannerProps) {
     const config = {
         unverified: {
             color: "bg-red-700",
@@ -20,9 +21,14 @@ export default function StatusBanner({ status }: StatusBannerProps) {
             icon: CheckCircle,
         },
         failed: {
-            color: "bg-yellow-600",
+            color: "bg-red-600",
             text: "VERIFICATION FAILED",
             icon: AlertOctagon,
+        },
+        patched: {
+            color: "bg-yellow-600",
+            text: "VULNERABILITY PATCHED (PROOF PENDING)",
+            icon: CheckCircle,
         },
         scanning: {
             color: "bg-blue-600",
@@ -31,7 +37,10 @@ export default function StatusBanner({ status }: StatusBannerProps) {
         },
     };
 
-    const current = config[status];
+    // If loading, force scanning view, otherwise use status
+    const effectiveStatus = isLoading ? "scanning" : status;
+    // Fallback if status is invalid or not in config (though TS prevents this mostly)
+    const current = config[effectiveStatus] || config["unverified"];
     const Icon = current.icon;
 
     return (
@@ -40,7 +49,7 @@ export default function StatusBanner({ status }: StatusBannerProps) {
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
         >
-            <Icon className={`w-8 h-8 ${status === "scanning" ? "animate-spin" : ""}`} />
+            <Icon className={`w-8 h-8 ${effectiveStatus === "scanning" ? "animate-spin" : ""}`} />
             <span>{current.text}</span>
         </motion.div>
     );

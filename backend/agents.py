@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import os
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 # Load environment variables from the root directory
 load_dotenv(os.path.join(os.path.dirname(__file__), '../.env'))
@@ -59,9 +60,9 @@ def triage_files(file_list: list[str]) -> list[str]:
     except json.JSONDecodeError:
         print(f"Error parsing triage response: {response_text}")
         return []
-
+"""
 def call_gemini(system_prompt: str, user_content: str) -> str:
-    """
+    
     Calls the Gemini API with a system prompt and user content.
     
     Args:
@@ -70,7 +71,7 @@ def call_gemini(system_prompt: str, user_content: str) -> str:
         
     Returns:
         The text response from the model.
-    """
+    
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise ValueError("GEMINI_API_KEY environment variable not set")
@@ -84,3 +85,44 @@ def call_gemini(system_prompt: str, user_content: str) -> str:
     
     response = model.generate_content(user_content)
     return response.text
+"""
+
+def call_gemini(prompt_template: str, content: str) -> str:
+    try:
+        # --- MISSING FIX: Configure the API Key first! ---
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return "-- Error: GEMINI_API_KEY not found in environment variables."
+        
+        genai.configure(api_key=api_key)
+        # -------------------------------------------------
+
+        model = genai.GenerativeModel(MODEL_NAME)
+        
+        # 1. Combine prompt and content
+        user_content = f"{prompt_template}\n\nUser Input:\n{content}"
+        
+        # 2. Disable Safety Filters
+        safety_settings = {
+            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        }
+
+        # 3. Generate with protections
+        response = model.generate_content(
+            user_content,
+            safety_settings=safety_settings
+        )
+
+        # 4. Safe Accessor
+        if response.parts:
+            return response.text
+        else:
+            print(f"Warning: Gemini returned empty response. Finish reason: {response.prompt_feedback}")
+            return "-- ARGUS_AGENT_ERROR: Agent refused to generate code. Returning input as fallback.\n" + content
+
+    except Exception as e:
+        print(f"Gemini API Error: {e}")
+        return f"-- Error calling Gemini: {e}"

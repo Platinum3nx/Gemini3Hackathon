@@ -10,7 +10,8 @@ import { ChevronDown, ChevronUp, Github, FileCode } from "lucide-react";
 
 export default function Home() {
   const [mode, setMode] = useState<"single" | "repo">("single");
-  const [status, setStatus] = useState<"unverified" | "verified" | "failed" | "scanning">("unverified");
+  const [status, setStatus] = useState<"unverified" | "verified" | "failed" | "scanning" | "patched">("unverified");
+  const [isLoading, setIsLoading] = useState(false);
 
   // Single File State
   const [code, setCode] = useState<string>("");
@@ -25,6 +26,7 @@ export default function Home() {
 
   const runSingleVerification = async () => {
     setStatus("scanning");
+    setIsLoading(true);
     setThinkingLogs([]);
     setVerifiedCode("");
 
@@ -53,7 +55,18 @@ export default function Home() {
             if (event.type === "result" || event.status === "success" || event.status === "verified" || event.status === "failed") {
               // Handle result (supporting both old 'success' schema if lingering, and new 'result' type)
               const resultData = event.result || event;
-              setStatus(resultData.status === "verified" ? "verified" : "failed");
+              const isVerified = resultData.status === "verified";
+              // Smart Status: If failed but we have fixed code (that is newly generated), show Patched
+              const isPatched = !isVerified && resultData.fixed_code && resultData.fixed_code.length > 0;
+
+              if (isVerified) {
+                setStatus("verified");
+              } else if (isPatched) {
+                setStatus("patched");
+              } else {
+                setStatus("failed");
+              }
+
               setVerifiedCode(resultData.fixed_code || "");
               setThinkingLogs(prev => [...prev, { status: "success", message: "Verification Protocol Complete." }]);
             } else if (event.type === "log" || event.status) {
@@ -71,11 +84,14 @@ export default function Home() {
       console.error(error);
       setStatus("failed");
       setThinkingLogs(prev => [...prev, { status: "error", message: "Connection Terminated Unexpectedly." }]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const runRepoVerification = async () => {
     setStatus("scanning");
+    setIsLoading(true);
     setThinkingLogs([]);
     setRepoResults([]);
 
@@ -109,7 +125,7 @@ export default function Home() {
               setThinkingLogs(prev => [...prev, { status: "success", message: `File Verified: ${event.filename}` }]);
             } else if (event.type === "complete") {
               // Full Scan Complete
-              setStatus("verified");
+              setStatus("verified"); // Or patched/mixed if we want distinct repo statuses
               setThinkingLogs(prev => [...prev, { status: "success", message: "Repository Audit Complete." }]);
             } else if (event.type === "log") {
               setThinkingLogs(prev => [...prev, { status: event.status, message: event.message }]);
@@ -126,13 +142,15 @@ export default function Home() {
       console.error(error);
       setStatus("failed");
       setThinkingLogs(prev => [...prev, { status: "error", message: "Repository Audit Failed." }]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <main className="min-h-screen bg-black text-white font-mono flex flex-col">
       <Header />
-      <StatusBanner status={status} />
+      <StatusBanner status={status} isLoading={isLoading} />
 
       {/* Mode Toggle */}
       <div className="flex justify-center py-6">
@@ -216,7 +234,7 @@ export default function Home() {
         >
           <div className={`absolute inset-0 opacity-20 ${mode === "single" ? "bg-gradient-to-r from-blue-600 to-purple-600" : "bg-gradient-to-r from-purple-600 to-pink-600"} group-hover:opacity-30 transition-opacity`} />
           <span className="relative font-bold tracking-widest text-lg">
-            {status === "scanning" ? "SCANNING TARGET..." : mode === "single" ? "RUN FORMAL VERIFICATION" : "INITIATE REPO AUDIT"}
+            {isLoading ? "SCANNING TARGET..." : mode === "single" ? "RUN FORMAL VERIFICATION" : "INITIATE REPO AUDIT"}
           </span>
         </button>
       </div>
