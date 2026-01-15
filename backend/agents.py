@@ -27,7 +27,32 @@ Strategy: Analyze the error (e.g., 'division by zero', 'index out of bounds'). R
 
 Output Format: Return only the corrected Python code."""
 
-MODEL_NAME = "gemini-3-pro-preview"
+# --- 3. THE TRIAGE AGENT (TRIAGE_PROMPT) ---
+TRIAGE_PROMPT = """Role: Senior Security Architect.
+
+Task: Given a list of filenames, identify the 3 files that are most critical for security, financial logic, or authentication.
+
+Output Format: Return ONLY the 3 filenames as a JSON list of strings. Do not include markdown code blocks."""
+
+MODEL_NAME = "gemini-3-flash-preview"
+
+def triage_files(file_list: list[str]) -> list[str]:
+    """
+    Calls the Gemini API to identify critical files.
+    """
+    import json
+    
+    content = f"Here is the list of files in the repository:\n{json.dumps(file_list)}\n\nPlease identify the top 3 high-risk files."
+    
+    response_text = call_gemini(TRIAGE_PROMPT, content)
+    
+    try:
+        # Strip potential markdown formatting
+        cleaned_text = response_text.replace("```json", "").replace("```", "").strip()
+        return json.loads(cleaned_text)
+    except json.JSONDecodeError:
+        print(f"Error parsing triage response: {response_text}")
+        return []
 
 def call_gemini(system_prompt: str, user_content: str) -> str:
     """

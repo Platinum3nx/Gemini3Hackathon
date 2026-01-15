@@ -10,12 +10,12 @@ interface StatusBannerProps {
 export default function StatusBanner({ status }: StatusBannerProps) {
     const config = {
         unverified: {
-            color: "bg-red-600",
-            text: "UNVERIFIED / VULNERABLE",
+            color: "bg-red-700",
+            text: "SYSTEM STATUS: AWAITING TARGET",
             icon: AlertOctagon,
         },
         verified: {
-            color: "bg-green-600",
+            color: "bg-emerald-600",
             text: "MATHEMATICALLY PROVEN",
             icon: CheckCircle,
         },
@@ -26,7 +26,7 @@ export default function StatusBanner({ status }: StatusBannerProps) {
         },
         scanning: {
             color: "bg-blue-600",
-            text: "VERITAS AI SCANNING...",
+            text: "ARGUS SCANNING...",
             icon: Loader2,
         },
     };
