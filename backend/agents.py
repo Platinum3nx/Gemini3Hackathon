@@ -14,6 +14,12 @@ Constraint: You must use import Mathlib at the top.
 
 Constraint: For the proof block (:= by ...), start simple. Use tactics like simp, arith, or induction if needed.
 
+STRATEGY FOR EXTERNAL CALLS: If you encounter code that interacts with the outside world (APIs, Databases, Randomness, Time, Libraries like Pandas/Numpy):
+Do NOT try to translate the library logic.
+Mock it using Lean 4 opaque definitions or axioms.
+Example: If the code is price = get_api_price(), translate it to: opaque get_api_price : IO Float -- Assume we get a float and verify the logic downstream.
+Goal: The verification should focus on the control flow and logic surrounding the API call, not the API call itself. If the user's logic crashes when the API returns 0, you must catch that.
+
 Output Format: Return only the Lean code block (no markdown ticks if possible, or strip them)."""
 
 # --- 2. THE FIXER (FIXER_PROMPT) ---

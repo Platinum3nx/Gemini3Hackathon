@@ -50,14 +50,17 @@ export default function Home() {
           try {
             const event = JSON.parse(line);
 
-            if (event.status === "success") {
-              // Final Result
-              setStatus(event.result.status);
-              setVerifiedCode(event.result.fixed_code);
+            if (event.type === "result" || event.status === "success" || event.status === "verified" || event.status === "failed") {
+              // Handle result (supporting both old 'success' schema if lingering, and new 'result' type)
+              const resultData = event.result || event;
+              setStatus(resultData.status === "verified" ? "verified" : "failed");
+              setVerifiedCode(resultData.fixed_code || "");
               setThinkingLogs(prev => [...prev, { status: "success", message: "Verification Protocol Complete." }]);
-            } else {
-              // Thinking Log
-              setThinkingLogs(prev => [...prev, { status: event.status, message: event.message }]);
+            } else if (event.type === "log" || event.status) {
+              // Handle log
+              const status = event.status || "working";
+              const message = event.message || "Processing...";
+              setThinkingLogs(prev => [...prev, { status, message }]);
             }
           } catch (e) {
             console.error("Error parsing stream:", e);
@@ -98,20 +101,21 @@ export default function Home() {
           try {
             const event = JSON.parse(line);
 
-            if (event.status === "success") {
-              // Individual File Success
+            if (event.type === "file_start") {
+              setThinkingLogs(prev => [...prev, { status: "scanning", message: `Analyzing ${event.filename}...` }]);
+            } else if (event.type === "result") {
+              // Individual File Result
               setRepoResults(prev => [...prev, event.result]);
-              setThinkingLogs(prev => [...prev, { status: "success", message: `File Verified: ${event.result.filename}` }]);
-            } else if (event.status === "complete") {
+              setThinkingLogs(prev => [...prev, { status: "success", message: `File Verified: ${event.filename}` }]);
+            } else if (event.type === "complete") {
               // Full Scan Complete
               setStatus("verified");
               setThinkingLogs(prev => [...prev, { status: "success", message: "Repository Audit Complete." }]);
-            } else if (event.status === "error") {
+            } else if (event.type === "log") {
+              setThinkingLogs(prev => [...prev, { status: event.status, message: event.message }]);
+            } else if (event.type === "error") {
               setStatus("failed");
               setThinkingLogs(prev => [...prev, { status: "error", message: event.message }]);
-            } else {
-              // Thinking Logs
-              setThinkingLogs(prev => [...prev, { status: event.status, message: event.message }]);
             }
           } catch (e) {
             console.error("Error parsing stream:", e);

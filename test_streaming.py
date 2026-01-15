@@ -31,8 +31,8 @@ def test_streaming_endpoints(mock_verify, mock_gemini, mock_scan):
             print(f"Received event: {line}")
             
     assert len(events) >= 3 # translating, verifying, success
-    assert events[0]["status"] == "translating"
-    assert events[-1]["status"] == "success"
+    assert events[0]["type"] == "log"
+    assert events[-1]["type"] == "result"
     print("PASS: /audit returns valid stream.")
     
     # 3. Test /audit_repo (Repo)
@@ -46,9 +46,15 @@ def test_streaming_endpoints(mock_verify, mock_gemini, mock_scan):
             repo_events.append(json.loads(line))
             print(f"Received event: {line}")
             
-    # Expected flow: scanning -> [file events] -> success (for file) -> complete (for repo)
-    assert repo_events[0]["status"] == "scanning"
-    assert repo_events[-1]["status"] == "complete"
+    # Expected flow: log (scanning) -> file_start -> [events] -> result -> file_end -> complete
+    assert repo_events[0]["type"] == "log"
+    
+    file_start = next(e for e in repo_events if e.get("type") == "file_start")
+    assert file_start["filename"] == "main.py"
+    
+    complete = repo_events[-1]
+    assert complete["type"] == "complete"
+    
     print("PASS: /audit_repo returns valid stream.")
 
 if __name__ == "__main__":
