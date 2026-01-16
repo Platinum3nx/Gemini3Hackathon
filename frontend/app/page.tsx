@@ -31,7 +31,8 @@ export default function Home() {
     setVerifiedCode("");
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/audit", {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${baseUrl}/audit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ python_code: code })
@@ -96,7 +97,8 @@ export default function Home() {
     setRepoResults([]);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/audit_repo", {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const response = await fetch(`${baseUrl}/audit_repo`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repo_url: repoUrl })
