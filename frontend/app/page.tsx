@@ -190,7 +190,7 @@ export default function Home() {
                 readOnly={true}
               />
               {/* Replaced Console with ThinkingProcess */}
-              <ThinkingProcess logs={thinkingLogs} />
+              <ThinkingProcess logs={thinkingLogs} isLoading={isLoading} />
             </div>
           </div>
         )}
@@ -213,7 +213,7 @@ export default function Home() {
             </div>
 
             {/* Thinking Process for Repo Mode */}
-            <ThinkingProcess logs={thinkingLogs} />
+            <ThinkingProcess logs={thinkingLogs} isLoading={isLoading} />
 
             {/* File Cards */}
             <div className="space-y-4">
