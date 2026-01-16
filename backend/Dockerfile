@@ -19,13 +19,13 @@ RUN elan default stable
 WORKDIR /app
 
 # Copy requirements.txt and install Python dependencies
-# We assume the build context is the repository root, so path is ./requirements.txt
+# Context is usually the 'backend' folder now, so we copy valid files from there.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the backend code into /app/backend
-# This ensures "from backend import ..." works if sys.path includes /app
-COPY backend ./backend
+# Copy everything in the current directory (backend/) to /app
+# This puts main.py, agents.py etc into /app
+COPY . .
 
 # Copy other necessary files if any (like verify_models.py if needed, or .env)
 # For now, just backend is critical, but implicit imports might require more.
