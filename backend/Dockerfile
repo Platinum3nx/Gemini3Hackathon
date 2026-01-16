@@ -23,17 +23,15 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy everything in the current directory (backend/) to /app
-# This puts main.py, agents.py etc into /app
-COPY . .
-
-# Copy other necessary files if any (like verify_models.py if needed, or .env)
-# For now, just backend is critical, but implicit imports might require more.
-# Let's copy the whole context to be safe, respecting .dockerignore
-COPY . .
+# Copy everything in the current directory (backend/) to /app/backend
+# This puts main.py, agents.py etc into /app/backend, restoring package structure
+COPY . ./backend
 
 # Expose port
 EXPOSE 8000
+
+# Set PYTHONPATH to /app so 'backend' package is found
+ENV PYTHONPATH=/app
 
 # Run commands
 # Running from /app, "backend.main" as module.
