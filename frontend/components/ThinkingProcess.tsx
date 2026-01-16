@@ -5,22 +5,27 @@ import { useEffect, useRef } from "react";
 
 interface ThinkingProcessProps {
     logs: { status: string; message: string }[];
+    isLoading?: boolean;
 }
 
-export default function ThinkingProcess({ logs }: ThinkingProcessProps) {
+export default function ThinkingProcess({ logs, isLoading }: ThinkingProcessProps) {
     const bottomRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView();
     }, [logs]);
 
-    const getIcon = (status: string) => {
+    const getIcon = (status: string, isActive: boolean) => {
+        if (isActive) {
+            return <Loader2 className="w-4 h-4 animate-spin text-blue-400" />;
+        }
         switch (status) {
             case "translating":
             case "verifying":
             case "fixing":
             case "scanning":
-                return <Loader2 className="w-4 h-4 animate-spin text-blue-400" />;
+                // If not active (i.e. history), show a checkmark or dot
+                return <CheckCircle className="w-4 h-4 text-gray-600" />;
             case "failed":
             case "error":
                 return <XCircle className="w-4 h-4 text-red-500" />;
@@ -40,19 +45,22 @@ export default function ThinkingProcess({ logs }: ThinkingProcessProps) {
 
             <div className="space-y-2">
                 <AnimatePresence initial={false}>
-                    {logs.map((log, idx) => (
-                        <motion.div
-                            key={idx}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="flex items-start space-x-3"
-                        >
-                            <div className="mt-1">{getIcon(log.status)}</div>
-                            <span className={`${log.status === "failed" ? "text-red-400" : log.status === "success" ? "text-green-400" : "text-gray-300"}`}>
-                                {log.message}
-                            </span>
-                        </motion.div>
-                    ))}
+                    {logs.map((log, idx) => {
+                        const isActive = !!isLoading && idx === logs.length - 1;
+                        return (
+                            <motion.div
+                                key={idx}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                className="flex items-start space-x-3"
+                            >
+                                <div className="mt-1">{getIcon(log.status, isActive)}</div>
+                                <span className={`${log.status === "failed" ? "text-red-400" : log.status === "success" ? "text-green-400" : "text-gray-300"}`}>
+                                    {log.message}
+                                </span>
+                            </motion.div>
+                        );
+                    })}
                 </AnimatePresence>
                 <div ref={bottomRef} />
             </div>
