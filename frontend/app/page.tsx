@@ -6,6 +6,7 @@ import Header from "../components/Header";
 import StatusBanner from "../components/StatusBanner";
 import CodeEditor from "../components/CodeEditor";
 import ThinkingProcess from "../components/ThinkingProcess"; // New Component
+import FileResultCard from "../components/FileResultCard";
 import { ChevronDown, ChevronUp, Github, FileCode } from "lucide-react";
 
 export default function Home() {
@@ -248,58 +249,4 @@ export default function Home() {
   );
 }
 
-function FileResultCard({ result }: { result: any }) {
-  const [expanded, setExpanded] = useState(false);
-  const isVerified = result.status === "verified";
 
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden transition-all duration-300 hover:border-gray-700">
-      <div
-        className="p-4 flex items-center justify-between cursor-pointer"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className="flex items-center space-x-4">
-          <FileCode className="w-6 h-6 text-blue-400" />
-          <h3 className="text-lg font-bold text-gray-200">{result.filename}</h3>
-        </div>
-
-        <div className="flex items-center space-x-4">
-          <span className={`px-3 py-1 rounded-full text-xs font-bold ${isVerified ? "bg-green-900/50 text-green-400 border border-green-800" : "bg-red-900/50 text-red-400 border border-red-800"}`}>
-            {result.status.toUpperCase()}
-          </span>
-          {expanded ? <ChevronUp className="w-5 h-5 text-gray-500" /> : <ChevronDown className="w-5 h-5 text-gray-500" />}
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="border-t border-gray-800"
-          >
-            <div className="grid grid-cols-2 gap-4 p-4 h-96">
-              <CodeEditor
-                label="ORIGINAL"
-                value={result.original_code}
-                readOnly={true}
-              />
-              <CodeEditor
-                label={isVerified ? "VERIFIED FIX" : "FAILED FIX"}
-                value={result.fixed_code}
-                readOnly={true}
-              />
-            </div>
-            <div className="p-4 bg-black/50 border-t border-gray-800 text-xs text-gray-400 font-mono">
-              <p className="mb-2 font-bold text-gray-300">AUDIT LOGS:</p>
-              {result.logs.slice(-3).map((log: string, i: number) => (
-                <div key={i}>&gt; {log}</div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}

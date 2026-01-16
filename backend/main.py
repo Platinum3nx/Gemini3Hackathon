@@ -43,7 +43,9 @@ async def process_single_file(code: str, filename: str = "snippet") -> AsyncGene
     yield json.dumps({"type": "log", "status": "verifying", "message": f"[{filename}] Running Formal Verification..."}) + "\n"
     result = lean_driver.run_verification(lean_code)
     
-    logs = [f"Initial verification result: {result['verified']}"]
+    initial_verified = result["verified"]
+    
+    logs = [f"Initial verification result: {initial_verified}"]
     proof = lean_code
     
     retries = 0
@@ -77,11 +79,14 @@ async def process_single_file(code: str, filename: str = "snippet") -> AsyncGene
         result = lean_driver.run_verification(lean_code)
         logs.append(f"Attempt {retries} result: {result['verified']}")
         
-    status = "verified" if result["verified"] else "failed"
+    final_verified = result["verified"]
+    status = "verified" if final_verified else "failed"
     print(f"[{filename}] Final status: {status}")
     
     final_result_dict = {
         "status": status,
+        "verified": initial_verified, # Was the original code verified?
+        "fix_verified": final_verified, # Is the final code verified?
         "original_code": original_code,
         "fixed_code": current_code,
         "proof": proof,
