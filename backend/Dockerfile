@@ -34,7 +34,7 @@ EXPOSE 8000
 ENV PYTHONPATH=/app
 
 # Copy entrypoint script for GitHub Actions
-COPY backend/entrypoint.sh /app/backend/entrypoint.sh
+COPY entrypoint.sh /app/backend/entrypoint.sh
 RUN chmod +x /app/backend/entrypoint.sh
 
 # Run commands
