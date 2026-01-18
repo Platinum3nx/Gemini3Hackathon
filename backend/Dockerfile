@@ -33,6 +33,10 @@ EXPOSE 8000
 # Set PYTHONPATH to /app so 'backend' package is found
 ENV PYTHONPATH=/app
 
+# Copy entrypoint script for GitHub Actions
+COPY backend/entrypoint.sh /app/backend/entrypoint.sh
+RUN chmod +x /app/backend/entrypoint.sh
+
 # Run commands
 # Running from /app, "backend.main" as module.
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,12 @@
+Name: 'Argus AI Auditor'
+Description: 'Formal Verification using Gemini 3 & Lean 4.'
+Inputs:
+  gemini_api_key:
+    description: 'Your Gemini API Key'
+    required: true
+Runs:
+  using: 'docker'
+  image: 'backend/Dockerfile'
+  entrypoint: '/app/backend/entrypoint.sh'
+  env:
+    GEMINI_API_KEY: ${{ inputs.gemini_api_key }}

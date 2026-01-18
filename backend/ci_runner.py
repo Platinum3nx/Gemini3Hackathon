@@ -8,22 +8,35 @@ from backend.main import process_single_file  # Import the logic, ignore app ins
 
 async def main():
     repo_url = os.environ.get("REPO_URL")
+    repo_path_env = os.environ.get("REPO_PATH")
     commit_sha = os.environ.get("COMMIT_SHA", "HEAD")
     
-    if not repo_url:
-        print(json.dumps({"error": "REPO_URL environment variable not set."}))
-        sys.exit(1)
-
-    print(f"Starting Argus Headless Audit for {repo_url} (Commit: {commit_sha})...", file=sys.stderr)
-    
     repo_path = None
+    should_cleanup = False # Don't delete user's code if using REPO_PATH
+
+    print(f"Starting Argus Headless Audit (Commit: {commit_sha})...", file=sys.stderr)
+    
     all_results = []
     has_failure = False
 
     try:
-        # 1. Clone
-        print("Cloning repository...", file=sys.stderr)
-        repo_path = repo_manager.clone_repo(repo_url)
+        # 1. Determine Source (Clone vs Local)
+        if repo_path_env:
+            print(f"Using local repository path: {repo_path_env}", file=sys.stderr)
+            repo_path = repo_path_env
+            if not os.path.exists(repo_path):
+                 print(f"Error: REPO_PATH {repo_path} does not exist.", file=sys.stderr)
+                 sys.exit(1)
+            # If repo_url isn't set, use the path as the "url" for reporting
+            if not repo_url:
+                repo_url = repo_path_env
+        elif repo_url:
+            print(f"Cloning repository from {repo_url}...", file=sys.stderr)
+            repo_path = repo_manager.clone_repo(repo_url)
+            should_cleanup = True
+        else:
+            print(json.dumps({"error": "Neither REPO_URL nor REPO_PATH environment variables are set."}))
+            sys.exit(1)
         
         # 2. Triage
         print("Identifying critical files...", file=sys.stderr)
@@ -79,7 +92,7 @@ async def main():
         sys.exit(1)
         
     finally:
-        if repo_path and os.path.exists(repo_path):
+        if should_cleanup and repo_path and os.path.exists(repo_path):
             print("Cleaning up workspace...", file=sys.stderr)
             shutil.rmtree(repo_path)
             
