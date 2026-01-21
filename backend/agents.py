@@ -80,7 +80,18 @@ Do NOT use `Option.getD`, `Option.isSome`, or `exists` logic. Keep it simple.
 
 Output Format: Return ONLY the raw Lean code. """
 
-FIXER_PROMPT = """Role: Senior Security Auditor. Task: Fix the Python code based on a mathematical error. Output Format: Return ONLY the raw corrected Python code. Do not use Markdown blocks."""
+FIXER_PROMPT = """Role: You are an expert Lean 4 Repair Agent.
+
+Input: You receive Broken Code and a Compiler Error.
+
+The Toolbox (Heuristics):
+1. IF error is 'tactic split failed' OR involves if/else: -> Strategy: Ensure you used intros after split. Try using `cases h : (expression)` to explicitly name the hypothesis.
+2. IF error involves Prod / × / Tuples: -> Strategy: Do NOT use .fst or .snd in proofs. Use `cases` to decompose the tuple (e.g., `cases res with val flag`).
+3. IF error involves Option or Match: -> Strategy: Ensure all cases (some val, none) are handled. Use `simp` before `split`.
+4. IF error is 'recursion' or 'decreasing': -> Strategy: Check if `partial def` is needed or provide a `termination_by` clause.
+5. IF generic math failure: -> Strategy: Try `simp_all` and `omega`.
+
+Output: Return ONLY the fixed Lean code block."""
 
 TRIAGE_PROMPT = """Role: Senior Security Architect. Task: Identify the top 3 high-risk files. Output Format: Return ONLY the 3 filenames as a JSON list of strings."""
 
@@ -163,28 +174,20 @@ def audit_file(filename: str, code: str) -> dict:
         print(f"[{filename}] Verification failed (Attempt {retries}/{max_retries}). Fixing...")
         logs.append(f"Attempt {retries} failed. Error: {result['error_message'][:50]}...")
         
-        # Fix
-        fix_input = f"Original Python Code:\n{current_code}\n\nLean Error Message:\n{result['error_message']}"
-        current_code = call_gemini(FIXER_PROMPT, fix_input)
+        # Fix (Lean-to-Lean)
+        fix_input = f"Broken Lean Code:\n{lean_code}\n\nCompiler Error:\n{result['error_message']}"
+        lean_code = call_gemini(FIXER_PROMPT, fix_input)
         
-        # Re-translate
-        print(f"[{filename}] Re-translating fixed code...")
-        lean_code = call_gemini(TRANSLATOR_PROMPT, current_code)
+        # NOTE: We skip re-translation because the fixer now repairs the PROOF, not the Python source.
+        # This resolves the 'brittle prompt' issue where converting simple logic errors back to Python is hard.
         
         # Re-verify
-        print(f"[{filename}] Re-verifying...")
+        print(f"[{filename}] Re-verifying fixed proof...")
         result = lean_driver.run_verification(lean_code)
         logs.append(f"Attempt {retries} result: {result['verified']}")
         
     final_verified = result["verified"]
     status = "verified" if final_verified else "failed"
-    
-    # If it was patched and verified, status is 'fixed' (or we can stick to 'verified' with a flag)
-    # The UI uses: verified (green), vulnerable (red), auto_patched (yellow/blue)
-    # Let's align with that:
-    # If initial_verified is True -> SECURE
-    # If initial is False but final is True -> AUTO_PATCHED
-    # If final is False -> VULNERABLE
     
     ui_status = "VULNERABLE"
     if initial_verified:
@@ -194,11 +197,11 @@ def audit_file(filename: str, code: str) -> dict:
         
     return {
         "filename": filename,
-        "status": ui_status, # High-level status
+        "status": ui_status,
         "verified": final_verified,
         "initial_verified": initial_verified,
         "proof": lean_code,
         "original_code": original_code,
-        "fixed_code": current_code,
+        "fixed_code": current_code, # This remains the Python code (unmodified if we only fixed the proof)
         "logs": logs
     }
