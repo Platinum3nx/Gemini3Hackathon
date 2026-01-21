@@ -43,12 +43,40 @@ Pattern: `next => intros; simp; omega` (or `assumption`).
      split
      next => intros; simp; omega  -- 'intros' captures the if-condition
      next => intros; assumption   -- 'intros' captures the else-condition
+
+   -- Example for Option Types:
+   def safe_div (a b : Int) : Option Int :=
+     if b == 0 then none else some (a / b)
+   theorem safe_div_safe (a b : Int) :
+     a >= 0 -> b > 0 ->
+     match safe_div a b with
+     | some res => res >= 0
+     | none => True := by
+     intros h1 h2
+     simp [safe_div]
+     split
+     next => intros; trivial      -- Handle error case
+     next => intros; simp; omega  -- Handle success case
    ```
 5. **ADAPTATION: Apply the pattern above to the User's specific Python code.
 
 6. **NO FLOATS: Convert all Python floats to Ints for verification.
 
 7. **DIRECT PROOFS:** Do NOT write theorems that end in -> True. You must prove the inequality directly (e.g., new_state.val >= 0).
+
+8. **OPTION/ERROR HANDLING:**
+
+If the Python code raises an error, translate the return type to `Option T` (return `none` on error).
+
+CRITICAL: When proving theorems about Option types, you MUST use a `match` statement.
+
+Pattern:
+```lean
+match func_call args with
+| some val => val >= 0  -- Prove safety of the value
+| none => True          -- Errors are considered safe/handled
+```
+Do NOT use `Option.getD`, `Option.isSome`, or `exists` logic. Keep it simple.
 
 Output Format: Return ONLY the raw Lean code. """
 
