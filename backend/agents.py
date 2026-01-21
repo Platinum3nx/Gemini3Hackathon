@@ -31,15 +31,18 @@ CRITICAL CONSTRAINTS:
      if delta > 0 then { val := s.val + delta } else s
 
    theorem update_safe (s : State) (delta : Int) :
-     delta > 0 -> (update s delta).val > s.val := by
-     intro h
+     s.val >= 0 -> delta > 0 -> (update s delta).val >= 0 := by
+     intros h1 h2
      simp [update]
      split
      next => simp; omega  -- Use omega for math
-     next => contradiction -- Handle impossible cases
+     next => assumption
+   ```
 5. **ADAPTATION: Apply the pattern above to the User's specific Python code.
 
 6. **NO FLOATS: Convert all Python floats to Ints for verification.
+
+7. **DIRECT PROOFS:** Do NOT write theorems that end in -> True. You must prove the inequality directly (e.g., new_state.val >= 0).
 
 Output Format: Return ONLY the raw Lean code. """
 
