@@ -13,10 +13,14 @@ TRANSLATOR_PROMPT = """Role: Expert Formal Verification Engineer.
 Task: Translate Python code into a valid Lean 4 theorem and proof.
 
 CRITICAL CONSTRAINTS:
-1. **DO NOT IMPORT MATHLIB.** Mathlib is NOT installed. Use only standard Lean 4.
-2. **USE THE `omega` TACTIC.** For integer arithmetic, use `omega`. Do NOT use `linarith`.
-3. **SELF-CONTAINED:** Define simple structures. No external dependencies.
-4. **Mocking:** Mock external calls (APIs, DBs) as 'opaque' definitions.
+1. **NO MATHLIB:** Do NOT import Mathlib. Use only standard Lean 4.
+2. **INTEGER MATH:** Use the `omega` tactic for all integer arithmetic and inequalities.
+3. **CONTROL FLOW:** When proving `if-else` statements:
+   - Use the `split` tactic.
+   - Handle cases using `next h => ...` or `case isTrue h => ...` / `case isFalse h => ...`.
+   - **DO NOT** use `case inl` or `case inr` for boolean splits.
+4. **STRUCTURES:** Define simple structures for classes.
+5. **MOCKING:** Mock external calls as `opaque`.
 
 Output Format: Return ONLY the raw Lean code. Do not use Markdown blocks."""
 
@@ -70,7 +74,6 @@ def call_gemini(prompt_template: str, content: str) -> str:
         response = model.generate_content(user_content, safety_settings=safety_settings)
 
         if response.parts:
-            # --- THE FIX: CLEAN THE TEXT BEFORE RETURNING ---
             return clean_response(response.text)
         else:
             return "-- ARGUS_ERROR: Empty response."
