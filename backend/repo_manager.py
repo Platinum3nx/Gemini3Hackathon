@@ -2,6 +2,7 @@ import os
 import shutil
 import tempfile
 import git
+import subprocess
 from typing import List
 from . import agents
 
@@ -20,7 +21,7 @@ def clone_repo(repo_url: str) -> str:
         shutil.rmtree(temp_dir)
         raise e
 
-def get_file_structure(repo_path: str) -> List[str]:
+def get_all_python_files(repo_path: str) -> List[str]:
     """
     Walks the directory and returns a list of .py files, ignoring standard ignored dirs.
     """
@@ -40,12 +41,45 @@ def get_file_structure(repo_path: str) -> List[str]:
                 
     return py_files
 
+def get_changed_files(repo_path: str) -> List[str]:
+    """
+    Identifies changed Python files between HEAD and HEAD^.
+    Falls back to scanning all files if git diff fails (e.g., shallow clone or first commit).
+    """
+    print("Checking for changed files...")
+    try:
+        # Run git diff --name-only HEAD^ HEAD
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD^", "HEAD"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        changed_files = result.stdout.strip().splitlines()
+        
+        # Filter for .py files that currently exist
+        valid_files = []
+        for f in changed_files:
+            if f.endswith('.py') and os.path.exists(os.path.join(repo_path, f)):
+                valid_files.append(f)
+                
+        print(f"Incremental scan identified {len(valid_files)} changed Python files.")
+        return valid_files
+        
+    except subprocess.CalledProcessError:
+        print("Incremental scan failed (likely shallow clone or first commit). Falling back to full scan.")
+        return get_all_python_files(repo_path)
+    except Exception as e:
+        print(f"Error during incremental scan: {e}. Falling back to full scan.")
+        return get_all_python_files(repo_path)
+
 def get_critical_files(repo_path: str) -> List[str]:
     """
     Identifies the top 3 critical files in the repo using the Triage Agent.
     """
     print("Analyzing file structure...")
-    file_list = get_file_structure(repo_path)
+    file_list = get_all_python_files(repo_path)
     
     if not file_list:
         print("No Python files found in repository.")
