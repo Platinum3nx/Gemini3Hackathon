@@ -15,7 +15,7 @@ Task: Translate Python code into a valid Lean 4 theorem.
 CRITICAL CONSTRAINTS:
 1. **NO MATHLIB:** Do NOT import Mathlib. Use only standard Lean 4.
 2. **USE 'omega':** For all integer arithmetic and inequalities, use the `omega` tactic.
-3. **CONTROL FLOW:** Use `split` and `next` for if/else. DO NOT use `case`.
+3. **CONTROL FLOW:** When verifying if/else logic, you MUST use `split` followed immediately by `next => intros`. This ensures the condition (e.g., x > 0) is available to the solver.
 
 4. **TRANSLATION PATTERN (Apply this pattern to ANY code):**
    - **Classes:** Translate Python classes into a Lean `structure`.
@@ -35,8 +35,8 @@ CRITICAL CONSTRAINTS:
      intros h1 h2
      simp [update]
      split
-     next => simp; omega  -- Use omega for math
-     next => assumption
+     next => intros; simp; omega  -- 'intros' captures the if-condition
+     next => intros; assumption   -- 'intros' captures the else-condition
    ```
 5. **ADAPTATION: Apply the pattern above to the User's specific Python code.
 
