@@ -95,3 +95,73 @@ def call_gemini(prompt_template: str, content: str) -> str:
     except Exception as e:
         print(f"Gemini API Error: {e}")
         return f"-- Error: {e}"
+
+from . import lean_driver
+
+def audit_file(filename: str, code: str) -> dict:
+    """
+    Audits a single file: Translates to Lean 4, verifies, and attempts to fix if failed.
+    Returns a dictionary with the final status and details.
+    """
+    original_code = code
+    current_code = original_code
+    
+    # Step 1: Initial Translation
+    print(f"[{filename}] Translating Python to Lean 4...")
+    lean_code = call_gemini(TRANSLATOR_PROMPT, current_code)
+    
+    # Step 2: Initial Verification
+    print(f"[{filename}] Verifying Lean code...")
+    result = lean_driver.run_verification(lean_code)
+    
+    initial_verified = result["verified"]
+    logs = [f"Initial verification result: {initial_verified}"]
+    
+    retries = 0
+    max_retries = 3
+    
+    # Step 3: Self-Healing Loop
+    while not result["verified"] and retries < max_retries:
+        retries += 1
+        print(f"[{filename}] Verification failed (Attempt {retries}/{max_retries}). Fixing...")
+        logs.append(f"Attempt {retries} failed. Error: {result['error_message'][:50]}...")
+        
+        # Fix
+        fix_input = f"Original Python Code:\n{current_code}\n\nLean Error Message:\n{result['error_message']}"
+        current_code = call_gemini(FIXER_PROMPT, fix_input)
+        
+        # Re-translate
+        print(f"[{filename}] Re-translating fixed code...")
+        lean_code = call_gemini(TRANSLATOR_PROMPT, current_code)
+        
+        # Re-verify
+        print(f"[{filename}] Re-verifying...")
+        result = lean_driver.run_verification(lean_code)
+        logs.append(f"Attempt {retries} result: {result['verified']}")
+        
+    final_verified = result["verified"]
+    status = "verified" if final_verified else "failed"
+    
+    # If it was patched and verified, status is 'fixed' (or we can stick to 'verified' with a flag)
+    # The UI uses: verified (green), vulnerable (red), auto_patched (yellow/blue)
+    # Let's align with that:
+    # If initial_verified is True -> SECURE
+    # If initial is False but final is True -> AUTO_PATCHED
+    # If final is False -> VULNERABLE
+    
+    ui_status = "VULNERABLE"
+    if initial_verified:
+        ui_status = "SECURE"
+    elif final_verified:
+        ui_status = "AUTO_PATCHED"
+        
+    return {
+        "filename": filename,
+        "status": ui_status, # High-level status
+        "verified": final_verified,
+        "initial_verified": initial_verified,
+        "proof": lean_code,
+        "original_code": original_code,
+        "fixed_code": current_code,
+        "logs": logs
+    }
