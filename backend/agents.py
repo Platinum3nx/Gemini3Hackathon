@@ -7,50 +7,61 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 # Load environment variables
 load_dotenv(os.path.join(os.path.dirname(__file__), '../.env'))
 
+# --- CONFIGURATION ---
+MODEL_NAME = "gemini-3-pro-preview"
+
 # --- PROMPTS ---
-TRANSLATOR_PROMPT = """Role: You are a LITERAL TRANSLATOR. You must preserve the logic of the source code exactly, including bugs.
 
-Task: Translate Python code into a valid Lean 4 theorem.
+# 1. THE "DUMB TRANSPILER" PROMPT (The Mirror Strategy)
+# This forces the AI to copy bugs literally. If the Python code lacks a check,
+# the Lean code must lack it too, so the proof will naturally fail.
+TRANSLATOR_PROMPT = """
+You are a mechanical, literal transpiler from Python to Lean 4. 
+You do NOT understand security. You do NOT fix bugs. Your goal is strict structural preservation.
 
-THE PRIME DIRECTIVE:
+### RULES:
+1. **Preserve Vulnerabilities:** If the Python code subtracts money without an `if` check, your Lean code **MUST** subtract money without an `if` check.
+2. **No Guardrails:** Do NOT add `if amount > 0` or `if balance >= amount` unless those exact lines appear in the Python source.
+3. **Structure Mapping:**
+   - Python `return x - y`  -> Lean `x - y`
+   - Python `if x > y:`     -> Lean `if x > y then`
+   - **NO OTHER CHANGES ALLOWED.**
 
-You must preserve the logic of the source code EXACTLY, including bugs.
+### EXAMPLES:
 
-EXPLICIT CONSTRAINTS:
+**Input (Python):**
+def withdraw(balance, amount):
+    # No checks!
+    return balance - amount
 
-1. If the Python code checks `if balance >= amount`, translate it.
-2. If the Python code DOES NOT check for overdrafts, your Lean code MUST NOT check for them. It should just return `balance - amount`.
-3. Do NOT add if/else branches that are not in the source.
-4. Do NOT use `sorry` or `admit`.
+**BAD Output (Do NOT do this - it fixes the bug):**
+def withdraw (b : Int) (a : Int) : Int :=
+  if b >= a then b - a else b
 
-THE GOAL:
+**CORRECT Output (Do this):**
+def withdraw (b : Int) (a : Int) : Int :=
+  b - a  -- Preserves the overdraft bug
 
-We are testing the security of the source code. If you fix the bugs during translation, the test becomes useless. Translate the vulnerability faithfully so the verifier can catch it.
+---
 
-TECHNICAL CONSTRAINTS:
-1. **NO MATHLIB:** Do NOT import Mathlib. Use only standard Lean 4.
-2. **USE 'omega':** For all integer arithmetic and inequalities, use the `omega` tactic.
-3. **CONTROL FLOW:** For if/else, use `split`. Pattern: `next => intros; simp; omega`.
-4. **TRANSLATION PATTERN:**
-   - **Classes:** Translate Python classes into a Lean `structure`.
-   - **Methods:** Translate methods into functions that take the structure as input and return a new structure.
-   - **Invariants:** Write a theorem checking that a specific property holds (e.g., balance >= 0).
-5. **NO FLOATS:** Convert all Python floats to Ints for verification.
+**Task:** Translate the following Python code to Lean 4. 
+Do NOT use 'sorry'. 
+Do NOT fix bugs. 
+If the code is unsafe, the proof must fail.
+"""
 
-Output Format: Return ONLY the raw Lean code. """
+# 2. THE "NUCLEAR OPTION" PROMPT (The Auto-Tactic)
+# This generic script tries everything (simplify, split, math) in a safe order.
+# It works for simple functions AND complex branching without crashing.
+FIXER_PROMPT = """
+Role: You are an automated proof generator. Output this exact Auto-Tactic script for every theorem.
 
-FIXER_PROMPT = """Role: You are a mechanical proof generator. Do NOT use the first tactic. Do NOT use match cases. Do NOT try to be clever.
+Instructions:
+1. Do NOT try to be clever.
+2. Do NOT use `first`, `match`, or complex branching.
+3. Just output the script below verbatim.
 
-Input: You receive Broken Code and a Compiler Error.
-
-CRITICAL: You must NOT define new inductive types, structures, or List recursive proofs (like foldl or induction) unless they are explicitly in the Python code. ONLY verify the functions present in the input.
-
-The Only Allowed Script:
-
-For EVERY theorem, you must output EXACTLY this script, verbatim:
-
-Lean
-
+The Universal Script:
 intros
 try simp [func_name]
 try split
@@ -60,13 +71,13 @@ all_goals (
   try omega
 )
 
-Explanation: This script uses try to safely attempt splitting. It works for Option types, if/else, and simple functions equally well. Just output it.
-
-Output: Return ONLY the fixed Lean code block."""
+Goal: This script mechanically attempts to split (if needed) and solves linear arithmetic (omega).
+Output: Return ONLY the fixed Lean code block.
+"""
 
 TRIAGE_PROMPT = """Role: Senior Security Architect. Task: Identify the top 3 high-risk files. Output Format: Return ONLY the 3 filenames as a JSON list of strings."""
 
-MODEL_NAME = "gemini-3-pro-preview"
+# --- HELPER FUNCTIONS ---
 
 def clean_response(text: str) -> str:
     """
@@ -76,27 +87,18 @@ def clean_response(text: str) -> str:
     text = re.sub(r"```$", "", text, flags=re.MULTILINE)
     return text.strip()
 
-def triage_files(file_list: list[str]) -> list[str]:
-    import json
-    content = f"Files: {json.dumps(file_list)}\n\nIdentify top 3 high-risk files."
-    response_text = call_gemini(TRIAGE_PROMPT, content)
-    try:
-        return json.loads(response_text)
-    except json.JSONDecodeError:
-        print(f"Error parsing triage: {response_text}")
-        return []
-
 def call_gemini(prompt_template: str, content: str) -> str:
     try:
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            return "-- Error: GEMINI_API_KEY not found."
+            return "-- ARGUS_ERROR: GEMINI_API_KEY not found."
 
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(MODEL_NAME)
         
         user_content = f"{prompt_template}\n\nUser Input:\n{content}"
         
+        # Disable safety settings so the model isn't afraid to discuss "vulnerable" code
         safety_settings = {
             HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -113,7 +115,19 @@ def call_gemini(prompt_template: str, content: str) -> str:
 
     except Exception as e:
         print(f"Gemini API Error: {e}")
-        return f"-- Error: {e}"
+        return f"-- ARGUS_ERROR: {e}"
+
+def triage_files(file_list: list[str]) -> list[str]:
+    import json
+    content = f"Files: {json.dumps(file_list)}\n\nIdentify top 3 high-risk files."
+    response_text = call_gemini(TRIAGE_PROMPT, content)
+    try:
+        return json.loads(response_text)
+    except json.JSONDecodeError:
+        print(f"Error parsing triage: {response_text}")
+        return []
+
+# --- MAIN AUDIT LOGIC ---
 
 from . import lean_driver
 
@@ -124,33 +138,48 @@ def audit_file(filename: str, code: str) -> dict:
     """
     original_code = code
     current_code = original_code
+    logs = []
     
     # Step 1: Initial Translation
     print(f"[{filename}] Translating Python to Lean 4...")
     lean_code = call_gemini(TRANSLATOR_PROMPT, current_code)
     
+    # FAIL-CLOSED CHECK:
+    # If the AI refuses to translate (due to safety filters or confusion), 
+    # we MUST assume the file is dangerous.
+    if not lean_code or "-- ARGUS_ERROR" in lean_code:
+        print(f"[{filename}] Translation failed. Flagging as VULNERABLE.")
+        return {
+            "filename": filename,
+            "status": "VULNERABLE",
+            "verified": False,
+            "initial_verified": False,
+            "proof": lean_code if lean_code else "-- Error: Model refused to translate.",
+            "original_code": original_code,
+            "fixed_code": None,
+            "logs": ["Model refused to translate code. Treated as Fail-Closed (Vulnerable)."]
+        }
+
     # Step 2: Initial Verification
     print(f"[{filename}] Verifying Lean code...")
     result = lean_driver.run_verification(lean_code)
     
     initial_verified = result["verified"]
-    logs = [f"Initial verification result: {initial_verified}"]
+    logs.append(f"Initial verification result: {initial_verified}")
     
     retries = 0
     max_retries = 3
     
     # Step 3: Self-Healing Loop
+    # We attempt to fix the PROOF, not the python code, to prove validity.
     while not result["verified"] and retries < max_retries:
         retries += 1
-        print(f"[{filename}] Verification failed (Attempt {retries}/{max_retries}). Fixing...")
+        print(f"[{filename}] Verification failed (Attempt {retries}/{max_retries}). Fixing Proof...")
         logs.append(f"Attempt {retries} failed. Error: {result['error_message'][:50]}...")
         
         # Fix (Lean-to-Lean)
         fix_input = f"Broken Lean Code:\n{lean_code}\n\nCompiler Error:\n{result['error_message']}"
         lean_code = call_gemini(FIXER_PROMPT, fix_input)
-        
-        # NOTE: We skip re-translation because the fixer now repairs the PROOF, not the Python source.
-        # This resolves the 'brittle prompt' issue where converting simple logic errors back to Python is hard.
         
         # Re-verify
         print(f"[{filename}] Re-verifying fixed proof...")
@@ -158,11 +187,11 @@ def audit_file(filename: str, code: str) -> dict:
         logs.append(f"Attempt {retries} result: {result['verified']}")
         
     final_verified = result["verified"]
-    status = "verified" if final_verified else "failed"
     
-    ui_status = "VULNERABLE"
-    if final_verified:
-        ui_status = "SECURE"
+    # LOGIC:
+    # If verified == True, the math proves the code is safe. -> SECURE
+    # If verified == False, the math proves the code is unsafe (or broken). -> VULNERABLE
+    ui_status = "SECURE" if final_verified else "VULNERABLE"
         
     return {
         "filename": filename,
@@ -171,6 +200,6 @@ def audit_file(filename: str, code: str) -> dict:
         "initial_verified": initial_verified,
         "proof": lean_code,
         "original_code": original_code,
-        "fixed_code": current_code, # This remains the Python code (unmodified if we only fixed the proof)
+        "fixed_code": current_code, 
         "logs": logs
     }
