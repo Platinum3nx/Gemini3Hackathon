@@ -190,10 +190,8 @@ def audit_file(filename: str, code: str) -> dict:
     status = "verified" if final_verified else "failed"
     
     ui_status = "VULNERABLE"
-    if initial_verified:
+    if final_verified:
         ui_status = "SECURE"
-    elif final_verified:
-        ui_status = "AUTO_PATCHED"
         
     return {
         "filename": filename,
