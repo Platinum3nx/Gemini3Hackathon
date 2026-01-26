@@ -78,17 +78,16 @@ Instructions:
 3. Just output the script below verbatim.
 
 The Universal Script:
-intros
-try simp [func_name]
-try split
-all_goals (
-  try intro
-  try simp_all
-  try omega
-)
+  unfold func_name
+  split_ifs <;> omega
 
-Goal: This script mechanically attempts to split (if needed) and solves linear arithmetic (omega).
-Output: Return ONLY the fixed Lean code block.
+Alternative (if split_ifs fails):
+  simp only [func_name]
+  split_ifs
+  all_goals omega
+
+Goal: This script unfolds the function, splits all if-then-else branches with split_ifs, and solves linear arithmetic with omega.
+Output: Return ONLY the fixed Lean code block with the corrected proof.
 """
 
 TRIAGE_PROMPT = """Role: Senior Security Architect. Task: Identify the top 3 high-risk files. Output Format: Return ONLY the 3 filenames as a JSON list of strings."""
