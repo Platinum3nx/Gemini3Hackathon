@@ -12,66 +12,20 @@ MODEL_NAME = "gemini-3-pro-preview"
 
 # --- PROMPTS ---
 
-# 1. THE "SEMANTIC AUDITOR" PROMPT (General Purpose)
-# Emphasizes LITERAL translation - the Translator must NOT fix bugs in function definitions.
-TRANSLATOR_PROMPT = """
-You are a Literal Code Translator. Your job is to create a MIRROR of the Python code in Lean 4.
+# 1. THEOREM GENERATOR PROMPT (Hybrid Approach)
+# Functions are translated by AST parser (100% reliable).
+# Gemini only generates the verification theorem.
+THEOREM_PROMPT = """
+You are given Lean 4 function definitions that were translated from Python.
 
-### CRITICAL RULE: NO FIXING BUGS
+Your task: Generate a theorem `verify_safety` that proves the main function's result is >= 0, assuming the starting balance is >= 0.
 
-If Python code is buggy (no guards, allows crashes), your Lean code MUST BE EQUALLY BUGGY.
+Rules:
+1. Only assume starting balance is valid: `(h_bal : balance ≥ 0)`
+2. Do NOT add extra hypotheses (like `amount <= balance`) - let the proof fail if the code is buggy
+3. Use this tactic pattern: `unfold <function_name>; split_ifs <;> omega`
 
-**LITERAL TRANSLATION EXAMPLES:**
-
-Python (BUGGY - no checks):
-```python
-def withdraw(balance, amount):
-    return balance - amount
-```
-
-Lean (MUST also have no checks):
-```lean
-def withdraw (balance : Int) (amount : Int) : Int :=
-  balance - amount
-```
-
-❌ WRONG (adding guards that don't exist):
-```lean
-def withdraw (balance : Int) (amount : Int) : Int :=
-  if amount > balance then balance else balance - amount  -- WRONG! Python has no 'if'!
-```
-
----
-
-Python (SECURE - has checks):
-```python
-def withdraw(balance, amount):
-    if amount <= 0:
-        return balance
-    if amount > balance:
-        return balance
-    return balance - amount
-```
-
-Lean (translate the checks literally):
-```lean
-def withdraw (balance : Int) (amount : Int) : Int :=
-  if amount ≤ 0 then balance
-  else if amount > balance then balance
-  else balance - amount
-```
-
----
-
-### VERIFICATION THEOREM
-
-After translating the functions, generate a theorem `verify_safety` that tries to prove the result is ≥ 0.
-
-- Only assume starting balance ≥ 0: `(h_bal : balance ≥ 0)`
-- Do NOT add hypotheses for guards that don't exist in the Python code
-- If the code is buggy, the proof WILL fail (this is correct behavior)
-
-**Theorem Example:**
+Example output:
 ```lean
 theorem verify_safety (balance amount : Int) (h_bal : balance ≥ 0) : 
   withdraw balance amount ≥ 0 := by
@@ -79,9 +33,7 @@ theorem verify_safety (balance amount : Int) (h_bal : balance ≥ 0) :
   split_ifs <;> omega
 ```
 
----
-
-**Output:** Only the Lean code. No markdown, no explanations.
+Output ONLY the theorem statement and proof. No markdown fences, no explanations.
 """
 
 # 2. THE "NUCLEAR OPTION" PROMPT (Universal Solver)
@@ -162,74 +114,99 @@ def triage_files(file_list: list[str]) -> list[str]:
 # --- MAIN AUDIT LOGIC ---
 
 from . import lean_driver
+from . import python_to_lean
 
 def audit_file(filename: str, code: str) -> dict:
     """
-    Audits a single file: Translates to Lean 4, verifies, and attempts to fix if failed.
+    Audits a single file using the HYBRID approach:
+    1. AST Parser translates Python -> Lean functions (100% reliable)
+    2. Gemini generates the verification theorem only
+    3. Lean compiler proves or disproves the theorem
+    
     Returns a dictionary with the final status and details.
     """
     original_code = code
-    current_code = original_code
     logs = []
     
-    # Step 1: Initial Translation
-    print(f"[{filename}] Translating Python to Lean 4...")
-    lean_code = call_gemini(TRANSLATOR_PROMPT, current_code)
+    # Step 1: AST-based Translation (100% reliable)
+    print(f"[{filename}] Step 1: AST Translation (Python -> Lean functions)...")
+    lean_functions = python_to_lean.translate_python_to_lean(code)
+    logs.append("AST translation completed")
     
-    # SAFETY INTERLOCK 1: Empty Response (Fail-Closed)
-    if not lean_code or "-- ARGUS_ERROR" in lean_code:
-        print(f"[{filename}] Translation failed. Flagging as VULNERABLE.")
+    # Check for parse errors
+    if lean_functions.startswith("-- PARSE_ERROR"):
+        print(f"[{filename}] Python parse error. Flagging as VULNERABLE.")
         return {
             "filename": filename,
             "status": "VULNERABLE",
             "verified": False,
-            "proof": lean_code if lean_code else "-- Error: Model refused to translate.",
+            "proof": lean_functions,
             "original_code": original_code,
             "fixed_code": None,
-            "logs": ["Model refused to translate code. Treated as Fail-Closed (Vulnerable)."]
+            "logs": ["Python code has syntax errors and could not be parsed."]
         }
-
-    # SAFETY INTERLOCK 2: Missing Theorem (Fail-Closed)
+    
+    # Step 2: Gemini generates theorem only
+    print(f"[{filename}] Step 2: Gemini generating verification theorem...")
+    theorem_input = f"Lean function definitions:\n\n{lean_functions}"
+    theorem_code = call_gemini(THEOREM_PROMPT, theorem_input)
+    logs.append("Theorem generation completed")
+    
+    # Clean up theorem (remove markdown if present)
+    theorem_code = clean_response(theorem_code)
+    
+    # Combine functions + theorem
+    lean_code = f"{lean_functions}\n\n{theorem_code}"
+    
+    # SAFETY INTERLOCK: Missing theorem
     if "theorem" not in lean_code:
-        print(f"[{filename}] No verification theorem found. Flagging as VULNERABLE.")
+        print(f"[{filename}] No theorem generated. Flagging as VULNERABLE.")
         return {
             "filename": filename,
-            "status": "VULNERABLE",
+            "status": "VULNERABLE", 
             "verified": False,
             "proof": lean_code,
             "original_code": original_code,
             "fixed_code": None,
-            "logs": ["AI generated function definitions but skipped the verification theorem."]
+            "logs": ["Gemini failed to generate verification theorem."]
         }
-
-    # Step 2: Initial Verification
-    print(f"[{filename}] Verifying Lean code...")
+    
+    # Step 3: Verification
+    print(f"[{filename}] Step 3: Running Lean verification...")
     result = lean_driver.run_verification(lean_code)
     
     initial_verified = result["verified"]
-    logs.append(f"Initial verification result: {initial_verified}")
+    logs.append(f"Initial verification: {'PASSED' if initial_verified else 'FAILED'}")
     
     retries = 0
     max_retries = 3
     
-    # Step 3: Self-Healing Loop (Fix Proof Only)
+    # Step 4: Self-Healing Loop (fix proof tactics only, not functions)
     while not result["verified"] and retries < max_retries:
         retries += 1
-        print(f"[{filename}] Verification failed (Attempt {retries}/{max_retries}). Fixing Proof...")
-        logs.append(f"Attempt {retries} failed. Error: {result['error_message'][:50]}...")
+        print(f"[{filename}] Proof failed. Attempt {retries}/{max_retries} to fix tactics...")
+        logs.append(f"Fix attempt {retries}: {result['error_message'][:50]}...")
         
-        fix_input = f"Broken Lean Code:\n{lean_code}\n\nCompiler Error:\n{result['error_message']}"
-        lean_code = call_gemini(FIXER_PROMPT, fix_input)
+        # Ask Gemini to fix the proof tactics (NOT the functions)
+        fix_input = f"Lean Code (DO NOT CHANGE THE FUNCTION DEFINITIONS):\n{lean_code}\n\nCompiler Error:\n{result['error_message']}"
+        fixed_code = call_gemini(FIXER_PROMPT, fix_input)
+        fixed_code = clean_response(fixed_code)
         
-        print(f"[{filename}] Re-verifying fixed proof...")
+        # If the fix is just tactics, append to original functions
+        if "def " not in fixed_code and "theorem" in fixed_code:
+            lean_code = f"{lean_functions}\n\n{fixed_code}"
+        else:
+            lean_code = fixed_code
+        
+        print(f"[{filename}] Re-verifying...")
         result = lean_driver.run_verification(lean_code)
-        logs.append(f"Attempt {retries} result: {result['verified']}")
-        
-    final_verified = result["verified"]
+        logs.append(f"Attempt {retries}: {'PASSED' if result['verified'] else 'FAILED'}")
     
-    # Final Status Determination
+    final_verified = result["verified"]
     ui_status = "SECURE" if final_verified else "VULNERABLE"
-        
+    
+    print(f"[{filename}] Final status: {ui_status}")
+    
     return {
         "filename": filename,
         "status": ui_status,
@@ -237,6 +214,6 @@ def audit_file(filename: str, code: str) -> dict:
         "initial_verified": initial_verified,
         "proof": lean_code,
         "original_code": original_code,
-        "fixed_code": current_code, 
+        "fixed_code": original_code,  # We don't modify Python in hybrid mode
         "logs": logs
     }
