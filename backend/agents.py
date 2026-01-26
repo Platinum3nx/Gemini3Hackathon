@@ -84,24 +84,20 @@ FIXER_PROMPT = """Role: You are an expert Lean 4 Repair Agent.
 
 Input: You receive Broken Code and a Compiler Error.
 
-Requirements:
+CRITICAL: You must NOT define new inductive types, structures, or List recursive proofs (like foldl or induction) unless they are explicitly in the Python code. ONLY verify the functions present in the input.
 
-Use the 'Double-Tap' Pattern:
+Verification Strategy (The 'First' Pattern):
 
-Instruction: Use `first | ... | ...` to try the direct approach, and fall back to splitting if it fails.
-
-The Golden Pattern:
+Use the `first` combinator for all function proofs. Apply this script to every theorem and stop there:
 
 Lean
 
 intros
 first
-| (simp [func_name]; simp_all; omega)  -- Plan A: Simple math (for deposit)
-| (simp [func_name]; split; all_goals (try intro; simp_all; omega)) -- Plan B: Split branches (for withdraw)
+| (simp [func_name]; simp_all; omega)  -- Try solving directly (for simple funcs)
+| (simp [func_name]; split; all_goals (try intro; simp_all; omega)) -- Try splitting (for if/else)
 
-Explanation: This handles both trivial functions (where split fails) and complex conditionals (where omega fails).
-
-Goal: Eliminate 'tactic failed' errors by attempting valid proofs sequentially.
+Goal: Prevent failures on self-generated complex recursion proofs. Verify only the direct function contracts.
 
 Output: Return ONLY the fixed Lean code block."""
 
