@@ -103,7 +103,7 @@ Output: Return ONLY the fixed Lean code block."""
 
 TRIAGE_PROMPT = """Role: Senior Security Architect. Task: Identify the top 3 high-risk files. Output Format: Return ONLY the 3 filenames as a JSON list of strings."""
 
-MODEL_NAME = "gemini-1.5-pro-002"
+MODEL_NAME = "gemini-2.0-flash-exp"
 
 def clean_response(text: str) -> str:
     """
