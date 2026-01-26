@@ -90,6 +90,16 @@ If the Python code allows a negative balance, your Lean code MUST allow a negati
 
 Context: If you fix the code during translation, the verifier will pass, and the security vulnerability will be missed. Be brutally literal.
 
+10. **HOSTILE VERIFICATION:**
+
+When generating theorems, you must NOT add "validity assumptions" (preconditions) unless the code explicitly enforces them.
+
+Bad Theorem: `theorem safe (x) : x > 0 -> func(x) ...` (If the code doesn't check `x > 0`, do NOT put this here).
+
+Good Theorem: `theorem safe (x) : func(x) ...` (Let the proof fail if the code handles x poorly).
+
+The Goal: We want the proof to FAIL if the Python code is missing safety checks. Do not "fix" the security hole by adding assumptions to the math.
+
 Output Format: Return ONLY the raw Lean code. """
 
 FIXER_PROMPT = """Role: You are a mechanical proof generator. Do NOT use the first tactic. Do NOT use match cases. Do NOT try to be clever.
