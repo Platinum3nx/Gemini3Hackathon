@@ -78,6 +78,18 @@ match func_call args with
 ```
 Do NOT use `Option.getD`, `Option.isSome`, or `exists` logic. Keep it simple.
 
+9. **STRICT FIDELITY (CRITICAL):**
+
+You are a FORENSIC TRANSLATOR. Your goal is to catch bugs, not fix them.
+
+If the Python code is missing a check (e.g., `if amount > 0:` with no balance check), your Lean translation MUST also be missing that check.
+
+DO NOT add `&& balance >= amount` unless it is explicitly in the Python source.
+
+If the Python code allows a negative balance, your Lean code MUST allow a negative balance.
+
+Context: If you fix the code during translation, the verifier will pass, and the security vulnerability will be missed. Be brutally literal.
+
 Output Format: Return ONLY the raw Lean code. """
 
 FIXER_PROMPT = """Role: You are a mechanical proof generator. Do NOT use the first tactic. Do NOT use match cases. Do NOT try to be clever.
