@@ -12,47 +12,56 @@ MODEL_NAME = "gemini-3-pro-preview"
 
 # --- PROMPTS ---
 
-# 1. THE "DUMB TRANSPILER" PROMPT (The Mirror Strategy)
-# This forces the AI to copy bugs literally. If the Python code lacks a check,
-# the Lean code must lack it too, so the proof will naturally fail.
+# 1. THE "SEMANTIC AUDITOR" PROMPT (General Purpose)
+# Instead of hardcoding ">= 0", we instruct the AI to use its intelligence
+# to determine what "Safety" means for the specific code provided.
 TRANSLATOR_PROMPT = """
-You are a mechanical, literal transpiler from Python to Lean 4. 
-You do NOT understand security. You do NOT fix bugs. Your goal is strict structural preservation.
+You are a Literal Code Translator and Security Auditor.
 
-### RULES:
-1. **Preserve Vulnerabilities:** If the Python code subtracts money without an `if` check, your Lean code **MUST** subtract money without an `if` check.
-2. **No Guardrails:** Do NOT add `if amount > 0` or `if balance >= amount` unless those exact lines appear in the Python source.
-3. **Structure Mapping:**
-   - Python `return x - y`  -> Lean `x - y`
-   - Python `if x > y:`     -> Lean `if x > y then`
-   - **NO OTHER CHANGES ALLOWED.**
+### PHASE 1: LITERAL TRANSLATION (The Mirror)
+Translate the Python code to Lean 4 EXACTLY as written.
+- **Strict Fidelity:** If the Python code allows a crash, an overflow, or an invalid state, your Lean code MUST allow it too.
+- **Do NOT fix bugs.**
+- **Do NOT add guardrails** (e.g., `if` checks) that are not in the source.
 
-### EXAMPLES:
+### PHASE 2: INFERRING SAFETY (The Specification)
+Analyze the function names, variable names, and logic to determine the **Implicit Safety Invariant**.
+- If the code handles money/quantities -> Invariant is likely `non-negative`.
+- If the code handles lists/arrays -> Invariant is likely `in-bounds`.
+- If the code handles sorting -> Invariant is `ordered`.
 
-**Input (Python):**
-def withdraw(balance, amount):
-    # No checks!
-    return balance - amount
+### PHASE 3: VERIFICATION THEOREM
+Generate a theorem named `verify_safety` that attempts to prove the **Implicit Safety Invariant** holds.
+- **Crucial:** If the Python code fails to enforce the invariant (e.g., allows negative balance), the theorem MUST try to prove it ANYWAY.
+- We WANT the proof to fail if the code is buggy.
 
-**BAD Output (Do NOT do this - it fixes the bug):**
-def withdraw (b : Int) (a : Int) : Int :=
-  if b >= a then b - a else b
+### EXAMPLES (For reasoning style, not copying):
 
-**CORRECT Output (Do this):**
-def withdraw (b : Int) (a : Int) : Int :=
-  b - a  -- Preserves the overdraft bug
+**Context: Banking**
+- Code: `withdraw(balance, amount)` with no checks.
+- Inferred Invariant: Balance must remain >= 0.
+- Theorem: `theorem verify_safety ... : balance >= 0 -> result >= 0`
+
+**Context: Inventory**
+- Code: `ship_items(stock, count)` with no checks.
+- Inferred Invariant: Stock must remain >= 0.
+- Theorem: `theorem verify_safety ... : stock >= 0 -> result >= 0`
+
+**Context: Access Control**
+- Code: `access(user_level)` where 0 is admin.
+- Inferred Invariant: High numbers shouldn't access low level features.
+- Theorem: `theorem verify_safety ... : input_level >= 0 ...`
 
 ---
 
-**Task:** Translate the following Python code to Lean 4. 
-Do NOT use 'sorry'. 
-Do NOT fix bugs. 
-If the code is unsafe, the proof must fail.
+**Task:** Translate the provided Python code to Lean 4.
+- Output ONLY the Lean code.
+- Do NOT use 'sorry'.
 """
 
-# 2. THE "NUCLEAR OPTION" PROMPT (The Auto-Tactic)
-# This generic script tries everything (simplify, split, math) in a safe order.
-# It works for simple functions AND complex branching without crashing.
+# 2. THE "NUCLEAR OPTION" PROMPT (Universal Solver)
+# This script works for ANY logic that involves integers or control flow.
+# It is not specific to wallets.
 FIXER_PROMPT = """
 Role: You are an automated proof generator. Output this exact Auto-Tactic script for every theorem.
 
@@ -98,7 +107,6 @@ def call_gemini(prompt_template: str, content: str) -> str:
         
         user_content = f"{prompt_template}\n\nUser Input:\n{content}"
         
-        # Disable safety settings so the model isn't afraid to discuss "vulnerable" code
         safety_settings = {
             HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -144,20 +152,30 @@ def audit_file(filename: str, code: str) -> dict:
     print(f"[{filename}] Translating Python to Lean 4...")
     lean_code = call_gemini(TRANSLATOR_PROMPT, current_code)
     
-    # FAIL-CLOSED CHECK:
-    # If the AI refuses to translate (due to safety filters or confusion), 
-    # we MUST assume the file is dangerous.
+    # SAFETY INTERLOCK 1: Empty Response (Fail-Closed)
     if not lean_code or "-- ARGUS_ERROR" in lean_code:
         print(f"[{filename}] Translation failed. Flagging as VULNERABLE.")
         return {
             "filename": filename,
             "status": "VULNERABLE",
             "verified": False,
-            "initial_verified": False,
             "proof": lean_code if lean_code else "-- Error: Model refused to translate.",
             "original_code": original_code,
             "fixed_code": None,
             "logs": ["Model refused to translate code. Treated as Fail-Closed (Vulnerable)."]
+        }
+
+    # SAFETY INTERLOCK 2: Missing Theorem (Fail-Closed)
+    if "theorem" not in lean_code:
+        print(f"[{filename}] No verification theorem found. Flagging as VULNERABLE.")
+        return {
+            "filename": filename,
+            "status": "VULNERABLE",
+            "verified": False,
+            "proof": lean_code,
+            "original_code": original_code,
+            "fixed_code": None,
+            "logs": ["AI generated function definitions but skipped the verification theorem."]
         }
 
     # Step 2: Initial Verification
@@ -170,27 +188,22 @@ def audit_file(filename: str, code: str) -> dict:
     retries = 0
     max_retries = 3
     
-    # Step 3: Self-Healing Loop
-    # We attempt to fix the PROOF, not the python code, to prove validity.
+    # Step 3: Self-Healing Loop (Fix Proof Only)
     while not result["verified"] and retries < max_retries:
         retries += 1
         print(f"[{filename}] Verification failed (Attempt {retries}/{max_retries}). Fixing Proof...")
         logs.append(f"Attempt {retries} failed. Error: {result['error_message'][:50]}...")
         
-        # Fix (Lean-to-Lean)
         fix_input = f"Broken Lean Code:\n{lean_code}\n\nCompiler Error:\n{result['error_message']}"
         lean_code = call_gemini(FIXER_PROMPT, fix_input)
         
-        # Re-verify
         print(f"[{filename}] Re-verifying fixed proof...")
         result = lean_driver.run_verification(lean_code)
         logs.append(f"Attempt {retries} result: {result['verified']}")
         
     final_verified = result["verified"]
     
-    # LOGIC:
-    # If verified == True, the math proves the code is safe. -> SECURE
-    # If verified == False, the math proves the code is unsafe (or broken). -> VULNERABLE
+    # Final Status Determination
     ui_status = "SECURE" if final_verified else "VULNERABLE"
         
     return {
