@@ -85,11 +85,9 @@ FIXER_PROMPT = """Role: You are an expert Lean 4 Repair Agent.
 Input: You receive Broken Code and a Compiler Error.
 
 The Toolbox (Heuristics):
-1. IF error is 'tactic split failed' OR involves if/else: -> Strategy: Ensure you used intros after split. Try using `cases h : (expression)` to explicitly name the hypothesis.
+1. IF error involves if/else OR Option types: -> Strategy: `unfold` or `simp` the function first. Then IMMEDIATELY use `split`. CRITICAL: Do NOT use `cases` on the function result (e.g., `cases (withdraw ...)` ) unless `split` fails. Pattern: `simp [func_name]; split; next => ...`
 2. IF error involves Prod / × / Tuples: -> Strategy: Do NOT use .fst or .snd in proofs. Use `cases` to decompose the tuple (e.g., `cases res with val flag`).
-3. IF error involves Option or Match: -> Strategy: Ensure all cases (some val, none) are handled. Use `simp` before `split`.
-4. IF error is 'recursion' or 'decreasing': -> Strategy: Check if `partial def` is needed or provide a `termination_by` clause.
-5. IF generic math failure: -> Strategy: Try `simp_all` and `omega`.
+3. IF generic math failure: -> Strategy: Try `simp_all` and `omega`.
 
 Output: Return ONLY the fixed Lean code block."""
 
