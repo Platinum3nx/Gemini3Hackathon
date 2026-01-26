@@ -86,21 +86,22 @@ Input: You receive Broken Code and a Compiler Error.
 
 Requirements:
 
-Replace the Control Flow Strategy with this 'Universal Robust Pattern':
+Use the 'Double-Tap' Pattern:
 
-Instruction: When fixing proofs for functions that might or might not simplify, use the try combinator.
+Instruction: Use `first | ... | ...` to try the direct approach, and fall back to splitting if it fails.
 
 The Golden Pattern:
 
 Lean
 
 intros
-simp [func_name]
-try split  -- This handles 'withdraw' (splits) AND 'deposit' (does nothing, safely)
-all_goals (try intro; simp_all; omega) -- Solves whatever is left
-Delete the complexity: Remove the complex instructions about "Priority 1 vs Priority 2". Just enforce this single robust script for if/else logic.
+first
+| (simp [func_name]; simp_all; omega)  -- Plan A: Simple math (for deposit)
+| (simp [func_name]; split; all_goals (try intro; simp_all; omega)) -- Plan B: Split branches (for withdraw)
 
-Goal: Ensure the proof script automatically adapts: it splits if necessary, and skips splitting if the function is already simplified.
+Explanation: This handles both trivial functions (where split fails) and complex conditionals (where omega fails).
+
+Goal: Eliminate 'tactic failed' errors by attempting valid proofs sequentially.
 
 Output: Return ONLY the fixed Lean code block."""
 
