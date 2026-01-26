@@ -41,6 +41,18 @@ TECHNICAL CONSTRAINTS:
 5. **NO FLOATS:** Convert all Python floats to Ints for verification.
 6. **OPTION/ERROR HANDLING:** If Python raises an error, translate to `Option T` (return `none` on error).
 
+CRITICAL CONSTRAINT (NO SORRY):
+
+You must NEVER use the keyword `sorry` or `admit` in your output.
+
+If the Python code is buggy (e.g., missing an overflow check), you must write a valid theorem (e.g., `balance >= 0`) and attempt to prove it using standard tactics (`omega`, `simp`).
+
+DO NOT try to "fix" the proof by using `sorry`.
+
+We WANT the verification to fail if the code is unsafe.
+
+A failed proof is a successful audit. A `sorry` proof is a failed audit.
+
 Output Format: Return ONLY the raw Lean code. """
 
 FIXER_PROMPT = """Role: You are a mechanical proof generator. Do NOT use the first tactic. Do NOT use match cases. Do NOT try to be clever.
