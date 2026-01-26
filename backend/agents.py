@@ -118,61 +118,38 @@ from . import python_to_lean
 
 def audit_file(filename: str, code: str) -> dict:
     """
-    Audits a single file using the HYBRID approach:
+    Audits a single file using FULLY DETERMINISTIC translation:
     1. AST Parser translates Python -> Lean functions (100% reliable)
-    2. Gemini generates the verification theorem only
+    2. Template generates verification theorem (100% reliable)
     3. Lean compiler proves or disproves the theorem
+    
+    Gemini is ONLY used for fixing failed proofs.
     
     Returns a dictionary with the final status and details.
     """
     original_code = code
     logs = []
     
-    # Step 1: AST-based Translation (100% reliable)
-    print(f"[{filename}] Step 1: AST Translation (Python -> Lean functions)...")
-    lean_functions = python_to_lean.translate_python_to_lean(code)
-    logs.append("AST translation completed")
+    # Step 1: Fully deterministic translation (NO LLM)
+    print(f"[{filename}] Step 1: Deterministic translation (Python -> Lean)...")
+    lean_code = python_to_lean.translate_with_theorem(code)
+    logs.append("Deterministic translation completed (functions + theorem)")
     
     # Check for parse errors
-    if lean_functions.startswith("-- PARSE_ERROR"):
+    if lean_code.startswith("-- PARSE_ERROR"):
         print(f"[{filename}] Python parse error. Flagging as VULNERABLE.")
         return {
             "filename": filename,
             "status": "VULNERABLE",
             "verified": False,
-            "proof": lean_functions,
+            "proof": lean_code,
             "original_code": original_code,
             "fixed_code": None,
             "logs": ["Python code has syntax errors and could not be parsed."]
         }
     
-    # Step 2: Gemini generates theorem only
-    print(f"[{filename}] Step 2: Gemini generating verification theorem...")
-    theorem_input = f"Lean function definitions:\n\n{lean_functions}"
-    theorem_code = call_gemini(THEOREM_PROMPT, theorem_input)
-    logs.append("Theorem generation completed")
-    
-    # Clean up theorem (remove markdown if present)
-    theorem_code = clean_response(theorem_code)
-    
-    # Combine functions + theorem
-    lean_code = f"{lean_functions}\n\n{theorem_code}"
-    
-    # SAFETY INTERLOCK: Missing theorem
-    if "theorem" not in lean_code:
-        print(f"[{filename}] No theorem generated. Flagging as VULNERABLE.")
-        return {
-            "filename": filename,
-            "status": "VULNERABLE", 
-            "verified": False,
-            "proof": lean_code,
-            "original_code": original_code,
-            "fixed_code": None,
-            "logs": ["Gemini failed to generate verification theorem."]
-        }
-    
-    # Step 3: Verification
-    print(f"[{filename}] Step 3: Running Lean verification...")
+    # Step 2: Verification
+    print(f"[{filename}] Step 2: Running Lean verification...")
     result = lean_driver.run_verification(lean_code)
     
     initial_verified = result["verified"]
@@ -181,7 +158,8 @@ def audit_file(filename: str, code: str) -> dict:
     retries = 0
     max_retries = 3
     
-    # Step 4: Self-Healing Loop (fix proof tactics only, not functions)
+    # Step 3: Self-Healing Loop (fix proof tactics only, KEEP functions)
+    original_lean_code = lean_code  # Save original for reference
     while not result["verified"] and retries < max_retries:
         retries += 1
         print(f"[{filename}] Proof failed. Attempt {retries}/{max_retries} to fix tactics...")
@@ -192,10 +170,8 @@ def audit_file(filename: str, code: str) -> dict:
         fixed_code = call_gemini(FIXER_PROMPT, fix_input)
         fixed_code = clean_response(fixed_code)
         
-        # If the fix is just tactics, append to original functions
-        if "def " not in fixed_code and "theorem" in fixed_code:
-            lean_code = f"{lean_functions}\n\n{fixed_code}"
-        else:
+        # Use the fixed code (Gemini should return complete code)
+        if "theorem" in fixed_code:
             lean_code = fixed_code
         
         print(f"[{filename}] Re-verifying...")

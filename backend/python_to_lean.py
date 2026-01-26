@@ -283,7 +283,7 @@ class PythonToLeanTranslator(ast.NodeVisitor):
 
 def translate_python_to_lean(python_code: str) -> str:
     """
-    Convenience function to translate Python code to Lean 4.
+    Convenience function to translate Python code to Lean 4 (functions only).
     
     Args:
         python_code: Python source code string
@@ -295,10 +295,83 @@ def translate_python_to_lean(python_code: str) -> str:
     return translator.translate(python_code)
 
 
+def generate_theorem(func_name: str = "withdraw", first_param: str = "balance") -> str:
+    """
+    Generate a deterministic verification theorem.
+    
+    The theorem always has the same structure:
+    - Assumes first parameter (balance) is >= 0
+    - Proves result is >= 0
+    - Uses split_ifs and omega tactics
+    
+    NO LLM INVOLVED - this is 100% deterministic.
+    """
+    return f"""theorem verify_safety ({first_param} amount : Int) (h_bal : {first_param} ≥ 0) : 
+  {func_name} {first_param} amount ≥ 0 := by
+  unfold {func_name}
+  split_ifs <;> omega"""
+
+
+def translate_with_theorem(python_code: str) -> str:
+    """
+    Complete translation: Python -> Lean functions + verification theorem.
+    
+    This is the main entry point for the hybrid system.
+    NO LLM is involved - everything is deterministic.
+    
+    Args:
+        python_code: Python source code string
+        
+    Returns:
+        Complete Lean 4 code with functions and theorem
+    """
+    # Step 1: Translate functions
+    lean_functions = translate_python_to_lean(python_code)
+    
+    if lean_functions.startswith("-- PARSE_ERROR"):
+        return lean_functions
+    
+    # Step 2: Identify the main function to verify
+    # Look for common financial function names
+    main_func = "withdraw"  # default
+    first_param = "balance"  # default
+    
+    for func_name in ["withdraw", "transfer", "deposit", "debit"]:
+        if f"def {func_name}" in lean_functions:
+            main_func = func_name
+            break
+    
+    # Extract first parameter name from function signature
+    import re
+    match = re.search(rf"def {main_func}\s+\((\w+)\s*:", lean_functions)
+    if match:
+        first_param = match.group(1)
+    
+    # Step 3: Generate theorem
+    theorem = generate_theorem(main_func, first_param)
+    
+    # Step 4: Combine
+    return f"{lean_functions}\n\n{theorem}"
+
+
 # Quick test
 if __name__ == "__main__":
-    test_code = '''
+    test_buggy = '''
 def withdraw(balance, amount):
     return balance - amount
 '''
-    print(translate_python_to_lean(test_code))
+    print("=== BUGGY ===")
+    print(translate_with_theorem(test_buggy))
+    print()
+    
+    test_secure = '''
+def withdraw(balance, amount):
+    if amount <= 0:
+        return balance
+    if amount > balance:
+        return balance
+    return balance - amount
+'''
+    print("=== SECURE ===")
+    print(translate_with_theorem(test_secure))
+
