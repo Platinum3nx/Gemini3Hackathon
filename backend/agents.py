@@ -80,24 +80,28 @@ Do NOT use `Option.getD`, `Option.isSome`, or `exists` logic. Keep it simple.
 
 Output Format: Return ONLY the raw Lean code. """
 
-FIXER_PROMPT = """Role: You are an expert Lean 4 Repair Agent.
+FIXER_PROMPT = """Role: You are a mechanical proof generator. Do NOT use the first tactic. Do NOT use match cases. Do NOT try to be clever.
 
 Input: You receive Broken Code and a Compiler Error.
 
 CRITICAL: You must NOT define new inductive types, structures, or List recursive proofs (like foldl or induction) unless they are explicitly in the Python code. ONLY verify the functions present in the input.
 
-Verification Strategy (The 'First' Pattern):
+The Only Allowed Script:
 
-Use the `first` combinator for all function proofs. Apply this script to every theorem and stop there:
+For EVERY theorem, you must output EXACTLY this script, verbatim:
 
 Lean
 
 intros
-first
-| (simp [func_name]; simp_all; omega)  -- Try solving directly (for simple funcs)
-| (simp [func_name]; split; all_goals (try intro; simp_all; omega)) -- Try splitting (for if/else)
+try simp [func_name]
+try split
+all_goals (
+  try intro
+  try simp_all
+  try omega
+)
 
-Goal: Prevent failures on self-generated complex recursion proofs. Verify only the direct function contracts.
+Explanation: This script uses try to safely attempt splitting. It works for Option types, if/else, and simple functions equally well. Just output it.
 
 Output: Return ONLY the fixed Lean code block."""
 
