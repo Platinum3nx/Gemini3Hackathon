@@ -8,97 +8,38 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 load_dotenv(os.path.join(os.path.dirname(__file__), '../.env'))
 
 # --- PROMPTS ---
-TRANSLATOR_PROMPT = """Role: Expert Formal Verification Engineer.
+TRANSLATOR_PROMPT = """Role: You are a Literal Code Translator. Your goal is to map Python logic 1:1 to Lean 4.
 
 Task: Translate Python code into a valid Lean 4 theorem.
 
-CRITICAL CONSTRAINTS:
+UNIVERSAL CONSTRAINT 1 (The Mirror Rule):
+
+Translate the control flow EXACTLY as written.
+
+If the Python code contains a check (e.g., `if x > 0:`), you MUST include it.
+
+If the Python code OMITS a check (e.g., it allows negative inputs), your Lean translation MUST also allow them.
+
+Do NOT "fix" bugs. Do NOT add safety checks that are not in the source.
+
+UNIVERSAL CONSTRAINT 2 (Theorem Fidelity):
+
+When generating verification theorems, do NOT add "validity assumptions" (preconditions) unless the code explicitly enforces them.
+
+Example: If a function `f(x)` does not check if `x > 0`, your theorem must attempt to prove safety for ALL x. Do not add `x > 0 -> ...` unless the code checks it.
+
+If the code is unsafe, we WANT the proof to fail.
+
+TECHNICAL CONSTRAINTS:
 1. **NO MATHLIB:** Do NOT import Mathlib. Use only standard Lean 4.
 2. **USE 'omega':** For all integer arithmetic and inequalities, use the `omega` tactic.
-3. **CONTROL FLOW & SIMPLIFICATION:**
-
-For if/else, use `split`.
-
-CRITICAL: Inside every `next` branch, you MUST run `simp` or `dsimp` before `omega`.
-
-Pattern: `next => intros; simp; omega` (or `assumption`).
-
-4. **TRANSLATION PATTERN (Apply this pattern to ANY code):**
+3. **CONTROL FLOW:** For if/else, use `split`. Pattern: `next => intros; simp; omega`.
+4. **TRANSLATION PATTERN:**
    - **Classes:** Translate Python classes into a Lean `structure`.
    - **Methods:** Translate methods into functions that take the structure as input and return a new structure.
-   - **Invariants:** Write a theorem checking that a specific property holds (e.g., "value never negative").
-
-   **GENERIC SYNTAX EXAMPLE (Do not copy, just follow the style):**
-   ```lean
-   structure State where
-     val : Int
-
-   def update (s : State) (delta : Int) : State :=
-     if delta > 0 then { val := s.val + delta } else s
-
-   theorem update_safe (s : State) (delta : Int) :
-     s.val >= 0 -> delta > 0 -> (update s delta).val >= 0 := by
-     intros h1 h2
-     simp [update]
-     split
-     next => intros; simp; omega  -- 'intros' captures the if-condition
-     next => intros; assumption   -- 'intros' captures the else-condition
-
-   -- Example for Option Types:
-   def safe_div (a b : Int) : Option Int :=
-     if b == 0 then none else some (a / b)
-   theorem safe_div_safe (a b : Int) :
-     a >= 0 -> b > 0 ->
-     match safe_div a b with
-     | some res => res >= 0
-     | none => True := by
-     intros h1 h2
-     simp [safe_div]
-     split
-     next => intros; trivial      -- Handle error case
-     next => intros; simp; omega  -- Handle success case
-   ```
-5. **ADAPTATION: Apply the pattern above to the User's specific Python code.
-
-6. **NO FLOATS: Convert all Python floats to Ints for verification.
-
-7. **DIRECT PROOFS:** Do NOT write theorems that end in -> True. You must prove the inequality directly (e.g., new_state.val >= 0).
-
-8. **OPTION/ERROR HANDLING:**
-
-If the Python code raises an error, translate the return type to `Option T` (return `none` on error).
-
-CRITICAL: When proving theorems about Option types, you MUST use a `match` statement.
-
-Pattern:
-```lean
-match func_call args with
-| some val => val >= 0  -- Prove safety of the value
-| none => True          -- Errors are considered safe/handled
-```
-Do NOT use `Option.getD`, `Option.isSome`, or `exists` logic. Keep it simple.
-
-9. **STRICT FIDELITY (CRITICAL):**
-
-You are a FORENSIC TRANSLATOR. Your goal is to catch bugs, not fix them.
-
-If the Python code is missing a check (e.g., `if amount > 0:` with no balance check), your Lean translation MUST also be missing that check.
-
-DO NOT add `&& balance >= amount` unless it is explicitly in the Python source.
-
-If the Python code allows a negative balance, your Lean code MUST allow a negative balance.
-
-Context: If you fix the code during translation, the verifier will pass, and the security vulnerability will be missed. Be brutally literal.
-
-10. **HOSTILE VERIFICATION:**
-
-When generating theorems, you must NOT add "validity assumptions" (preconditions) unless the code explicitly enforces them.
-
-Bad Theorem: `theorem safe (x) : x > 0 -> func(x) ...` (If the code doesn't check `x > 0`, do NOT put this here).
-
-Good Theorem: `theorem safe (x) : func(x) ...` (Let the proof fail if the code handles x poorly).
-
-The Goal: We want the proof to FAIL if the Python code is missing safety checks. Do not "fix" the security hole by adding assumptions to the math.
+   - **Invariants:** Write a theorem checking that a specific property holds.
+5. **NO FLOATS:** Convert all Python floats to Ints for verification.
+6. **OPTION/ERROR HANDLING:** If Python raises an error, translate to `Option T` (return `none` on error).
 
 Output Format: Return ONLY the raw Lean code. """
 
