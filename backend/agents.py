@@ -13,57 +13,75 @@ MODEL_NAME = "gemini-3-pro-preview"
 # --- PROMPTS ---
 
 # 1. THE "SEMANTIC AUDITOR" PROMPT (General Purpose)
-# Instead of hardcoding ">= 0", we instruct the AI to use its intelligence
-# to determine what "Safety" means for the specific code provided.
+# Emphasizes LITERAL translation - the Translator must NOT fix bugs in function definitions.
 TRANSLATOR_PROMPT = """
-You are a Literal Code Translator and Security Auditor.
+You are a Literal Code Translator. Your job is to create a MIRROR of the Python code in Lean 4.
 
-### PHASE 1: LITERAL TRANSLATION (The Mirror)
-Translate the Python code to Lean 4 EXACTLY as written.
-- **Strict Fidelity:** If the Python code allows a crash, an overflow, or an invalid state, your Lean code MUST allow it too.
-- **Do NOT fix bugs.**
-- **Do NOT add guardrails** (e.g., `if` checks) that are not in the source.
+### CRITICAL RULE: NO FIXING BUGS
 
-### PHASE 2: INFERRING SAFETY (The Specification)
-Analyze the function names, variable names, and logic to determine the **Implicit Safety Invariant**.
-- If the code handles money/quantities -> Invariant is likely `non-negative`.
-- If the code handles lists/arrays -> Invariant is likely `in-bounds`.
-- If the code handles sorting -> Invariant is `ordered`.
+If Python code is buggy (no guards, allows crashes), your Lean code MUST BE EQUALLY BUGGY.
 
-### PHASE 3: VERIFICATION THEOREM
-Generate a theorem named `verify_safety` that attempts to prove the **Implicit Safety Invariant** holds.
-- **Crucial:** If the Python code fails to enforce the invariant (e.g., allows negative balance), the theorem MUST try to prove it ANYWAY.
-- We WANT the proof to fail if the code is buggy.
+**LITERAL TRANSLATION EXAMPLES:**
 
-### FORBIDDEN PATTERNS (Critical - Read Carefully)
-You MUST NOT add hypotheses to the theorem that are not ENFORCED by the Python code:
-- ❌ WRONG: `(h_amt : amount ≤ balance)` when Python has NO `if amount <= balance` check
-- ❌ WRONG: `(h_pos : amount > 0)` when Python has NO `if amount > 0` check
-- ✅ CORRECT: Only assume `(h_bal : balance ≥ 0)` (the starting state)
+Python (BUGGY - no checks):
+```python
+def withdraw(balance, amount):
+    return balance - amount
+```
 
-**The theorem tests whether the CODE enforces safety, not whether safety WOULD hold given ideal inputs.**
+Lean (MUST also have no checks):
+```lean
+def withdraw (balance : Int) (amount : Int) : Int :=
+  balance - amount
+```
 
-If the Python code has NO guard against overdraft, the Lean theorem MUST attempt to prove safety WITHOUT assuming the guard exists. This will cause the proof to FAIL, which is the correct behavior for buggy code.
-
-### EXAMPLES (For reasoning style, not copying):
-
-**Context: BUGGY Banking Code (no checks)**
-- Code: `withdraw(balance, amount)` with NO `if` checks.
-- Theorem MUST be: `theorem verify_safety (balance amount : Int) (h_bal : balance ≥ 0) : withdraw balance amount ≥ 0`
-- Note: NO hypothesis about `amount ≤ balance` because the code doesn't check it!
-- Expected: Proof FAILS (correct - the code is buggy)
-
-**Context: SECURE Banking Code (has checks)**
-- Code: `withdraw(balance, amount)` with `if amount > balance: return balance`
-- Theorem: `theorem verify_safety (balance amount : Int) (h_bal : balance ≥ 0) : withdraw balance amount ≥ 0`
-- Expected: Proof PASSES (correct - the code is safe)
+❌ WRONG (adding guards that don't exist):
+```lean
+def withdraw (balance : Int) (amount : Int) : Int :=
+  if amount > balance then balance else balance - amount  -- WRONG! Python has no 'if'!
+```
 
 ---
 
-**Task:** Translate the provided Python code to Lean 4.
-- Output ONLY the Lean code.
-- Do NOT use 'sorry'.
-- Do NOT add theorem hypotheses for guards that don't exist in the Python code.
+Python (SECURE - has checks):
+```python
+def withdraw(balance, amount):
+    if amount <= 0:
+        return balance
+    if amount > balance:
+        return balance
+    return balance - amount
+```
+
+Lean (translate the checks literally):
+```lean
+def withdraw (balance : Int) (amount : Int) : Int :=
+  if amount ≤ 0 then balance
+  else if amount > balance then balance
+  else balance - amount
+```
+
+---
+
+### VERIFICATION THEOREM
+
+After translating the functions, generate a theorem `verify_safety` that tries to prove the result is ≥ 0.
+
+- Only assume starting balance ≥ 0: `(h_bal : balance ≥ 0)`
+- Do NOT add hypotheses for guards that don't exist in the Python code
+- If the code is buggy, the proof WILL fail (this is correct behavior)
+
+**Theorem Example:**
+```lean
+theorem verify_safety (balance amount : Int) (h_bal : balance ≥ 0) : 
+  withdraw balance amount ≥ 0 := by
+  unfold withdraw
+  split_ifs <;> omega
+```
+
+---
+
+**Output:** Only the Lean code. No markdown, no explanations.
 """
 
 # 2. THE "NUCLEAR OPTION" PROMPT (Universal Solver)
