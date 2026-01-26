@@ -84,23 +84,23 @@ FIXER_PROMPT = """Role: You are an expert Lean 4 Repair Agent.
 
 Input: You receive Broken Code and a Compiler Error.
 
-The Toolbox (Heuristics):
+Requirements:
 
-Priority 1 (The 'Happy Path'):
-Strategy: Always try to solve immediately.
-Code: `simp [func_name]; simp_all; omega`.
-Instruction: Try this first. If the function simplifies completely (removing if/else), this will solve it.
+Replace the Control Flow Strategy with this 'Universal Robust Pattern':
 
-Priority 2 (The 'Branching Path'):
-Strategy: If Priority 1 fails, then split.
-Code: `unfold [func_name]; split; next => intro; simp_all; omega`.
-Note: Use `unfold` instead of `simp` here to ensure the if-structure remains for `split`.
+Instruction: When fixing proofs for functions that might or might not simplify, use the try combinator.
 
-Priority 3 (Fallback):
-Strategy: Generic math failure.
-Code: `simp_all; omega`.
+The Golden Pattern:
 
-Goal: Prevent 'tactic split failed' errors when the proof simplifies trivial if-statements.
+Lean
+
+intros
+simp [func_name]
+try split  -- This handles 'withdraw' (splits) AND 'deposit' (does nothing, safely)
+all_goals (try intro; simp_all; omega) -- Solves whatever is left
+Delete the complexity: Remove the complex instructions about "Priority 1 vs Priority 2". Just enforce this single robust script for if/else logic.
+
+Goal: Ensure the proof script automatically adapts: it splits if necessary, and skips splitting if the function is already simplified.
 
 Output: Return ONLY the fixed Lean code block."""
 
