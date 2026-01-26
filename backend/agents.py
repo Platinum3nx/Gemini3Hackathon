@@ -35,28 +35,35 @@ Generate a theorem named `verify_safety` that attempts to prove the **Implicit S
 - **Crucial:** If the Python code fails to enforce the invariant (e.g., allows negative balance), the theorem MUST try to prove it ANYWAY.
 - We WANT the proof to fail if the code is buggy.
 
+### FORBIDDEN PATTERNS (Critical - Read Carefully)
+You MUST NOT add hypotheses to the theorem that are not ENFORCED by the Python code:
+- ❌ WRONG: `(h_amt : amount ≤ balance)` when Python has NO `if amount <= balance` check
+- ❌ WRONG: `(h_pos : amount > 0)` when Python has NO `if amount > 0` check
+- ✅ CORRECT: Only assume `(h_bal : balance ≥ 0)` (the starting state)
+
+**The theorem tests whether the CODE enforces safety, not whether safety WOULD hold given ideal inputs.**
+
+If the Python code has NO guard against overdraft, the Lean theorem MUST attempt to prove safety WITHOUT assuming the guard exists. This will cause the proof to FAIL, which is the correct behavior for buggy code.
+
 ### EXAMPLES (For reasoning style, not copying):
 
-**Context: Banking**
-- Code: `withdraw(balance, amount)` with no checks.
-- Inferred Invariant: Balance must remain >= 0.
-- Theorem: `theorem verify_safety ... : balance >= 0 -> result >= 0`
+**Context: BUGGY Banking Code (no checks)**
+- Code: `withdraw(balance, amount)` with NO `if` checks.
+- Theorem MUST be: `theorem verify_safety (balance amount : Int) (h_bal : balance ≥ 0) : withdraw balance amount ≥ 0`
+- Note: NO hypothesis about `amount ≤ balance` because the code doesn't check it!
+- Expected: Proof FAILS (correct - the code is buggy)
 
-**Context: Inventory**
-- Code: `ship_items(stock, count)` with no checks.
-- Inferred Invariant: Stock must remain >= 0.
-- Theorem: `theorem verify_safety ... : stock >= 0 -> result >= 0`
-
-**Context: Access Control**
-- Code: `access(user_level)` where 0 is admin.
-- Inferred Invariant: High numbers shouldn't access low level features.
-- Theorem: `theorem verify_safety ... : input_level >= 0 ...`
+**Context: SECURE Banking Code (has checks)**
+- Code: `withdraw(balance, amount)` with `if amount > balance: return balance`
+- Theorem: `theorem verify_safety (balance amount : Int) (h_bal : balance ≥ 0) : withdraw balance amount ≥ 0`
+- Expected: Proof PASSES (correct - the code is safe)
 
 ---
 
 **Task:** Translate the provided Python code to Lean 4.
 - Output ONLY the Lean code.
 - Do NOT use 'sorry'.
+- Do NOT add theorem hypotheses for guards that don't exist in the Python code.
 """
 
 # 2. THE "NUCLEAR OPTION" PROMPT (Universal Solver)
