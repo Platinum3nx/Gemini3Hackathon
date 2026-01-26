@@ -8,27 +8,24 @@ from google.generativeai.types import HarmCategory, HarmBlockThreshold
 load_dotenv(os.path.join(os.path.dirname(__file__), '../.env'))
 
 # --- PROMPTS ---
-TRANSLATOR_PROMPT = """Role: You are a Literal Code Translator. Your goal is to map Python logic 1:1 to Lean 4.
+TRANSLATOR_PROMPT = """Role: You are a LITERAL TRANSLATOR. You must preserve the logic of the source code exactly, including bugs.
 
 Task: Translate Python code into a valid Lean 4 theorem.
 
-UNIVERSAL CONSTRAINT 1 (The Mirror Rule):
+THE PRIME DIRECTIVE:
 
-Translate the control flow EXACTLY as written.
+You must preserve the logic of the source code EXACTLY, including bugs.
 
-If the Python code contains a check (e.g., `if x > 0:`), you MUST include it.
+EXPLICIT CONSTRAINTS:
 
-If the Python code OMITS a check (e.g., it allows negative inputs), your Lean translation MUST also allow them.
+1. If the Python code checks `if balance >= amount`, translate it.
+2. If the Python code DOES NOT check for overdrafts, your Lean code MUST NOT check for them. It should just return `balance - amount`.
+3. Do NOT add if/else branches that are not in the source.
+4. Do NOT use `sorry` or `admit`.
 
-Do NOT "fix" bugs. Do NOT add safety checks that are not in the source.
+THE GOAL:
 
-UNIVERSAL CONSTRAINT 2 (Theorem Fidelity):
-
-When generating verification theorems, do NOT add "validity assumptions" (preconditions) unless the code explicitly enforces them.
-
-Example: If a function `f(x)` does not check if `x > 0`, your theorem must attempt to prove safety for ALL x. Do not add `x > 0 -> ...` unless the code checks it.
-
-If the code is unsafe, we WANT the proof to fail.
+We are testing the security of the source code. If you fix the bugs during translation, the test becomes useless. Translate the vulnerability faithfully so the verifier can catch it.
 
 TECHNICAL CONSTRAINTS:
 1. **NO MATHLIB:** Do NOT import Mathlib. Use only standard Lean 4.
@@ -37,21 +34,8 @@ TECHNICAL CONSTRAINTS:
 4. **TRANSLATION PATTERN:**
    - **Classes:** Translate Python classes into a Lean `structure`.
    - **Methods:** Translate methods into functions that take the structure as input and return a new structure.
-   - **Invariants:** Write a theorem checking that a specific property holds.
+   - **Invariants:** Write a theorem checking that a specific property holds (e.g., balance >= 0).
 5. **NO FLOATS:** Convert all Python floats to Ints for verification.
-6. **OPTION/ERROR HANDLING:** If Python raises an error, translate to `Option T` (return `none` on error).
-
-CRITICAL CONSTRAINT (NO SORRY):
-
-You must NEVER use the keyword `sorry` or `admit` in your output.
-
-If the Python code is buggy (e.g., missing an overflow check), you must write a valid theorem (e.g., `balance >= 0`) and attempt to prove it using standard tactics (`omega`, `simp`).
-
-DO NOT try to "fix" the proof by using `sorry`.
-
-We WANT the verification to fail if the code is unsafe.
-
-A failed proof is a successful audit. A `sorry` proof is a failed audit.
 
 Output Format: Return ONLY the raw Lean code. """
 
