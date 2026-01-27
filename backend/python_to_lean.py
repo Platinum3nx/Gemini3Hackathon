@@ -142,12 +142,21 @@ class PythonToLeanTranslator(ast.NodeVisitor):
             
             if first.orelse:
                 # Has explicit else - use it as the else branch
-                else_body = self._translate_guard_pattern(first.orelse, indent).lstrip()
-                return f"{prefix}if {cond} then {then_body}\n{prefix}else {else_body}"
+                else_body = self._translate_guard_pattern(first.orelse, indent + 2)
+                # Check if else body has multiple lines (let bindings)
+                if '\n' in else_body:
+                    # Multi-line: put on new line with proper indentation
+                    return f"{prefix}if {cond} then {then_body}\n{prefix}else\n{else_body}"
+                else:
+                    # Single line: inline it
+                    return f"{prefix}if {cond} then {then_body}\n{prefix}else {else_body.strip()}"
             elif rest:
                 # No else but more statements - chain them as else
-                else_body = self._translate_guard_pattern(rest, indent).lstrip()
-                return f"{prefix}if {cond} then {then_body}\n{prefix}else {else_body}"
+                else_body = self._translate_guard_pattern(rest, indent + 2)
+                if '\n' in else_body:
+                    return f"{prefix}if {cond} then {then_body}\n{prefix}else\n{else_body}"
+                else:
+                    return f"{prefix}if {cond} then {then_body}\n{prefix}else {else_body.strip()}"
             else:
                 # Last statement is an if without else - shouldn't happen in good code
                 return f"{prefix}if {cond} then {then_body} else sorry"
