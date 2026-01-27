@@ -155,24 +155,43 @@ def audit_file(filename: str, code: str) -> dict:
     initial_verified = result["verified"]
     logs.append(f"Initial verification: {'PASSED' if initial_verified else 'FAILED'}")
     
+    # Extract original theorem signature for validation
+    import re
+    original_theorem_match = re.search(r'theorem\s+\w+\s*\([^)]+\)\s*:', lean_code)
+    original_theorem_sig = original_theorem_match.group(0) if original_theorem_match else ""
+    
     retries = 0
     max_retries = 3
     
-    # Step 3: Self-Healing Loop (fix proof tactics only, KEEP functions)
+    # Step 3: Self-Healing Loop (fix proof tactics only, KEEP theorem signature)
     original_lean_code = lean_code  # Save original for reference
     while not result["verified"] and retries < max_retries:
         retries += 1
         print(f"[{filename}] Proof failed. Attempt {retries}/{max_retries} to fix tactics...")
         logs.append(f"Fix attempt {retries}: {result['error_message'][:50]}...")
         
-        # Ask Gemini to fix the proof tactics (NOT the functions)
-        fix_input = f"Lean Code (DO NOT CHANGE THE FUNCTION DEFINITIONS):\n{lean_code}\n\nCompiler Error:\n{result['error_message']}"
+        # Ask Gemini to fix the proof tactics (NOT the functions or theorem signature)
+        fix_input = f"Lean Code (DO NOT CHANGE FUNCTION DEFINITIONS OR THEOREM SIGNATURE):\n{lean_code}\n\nCompiler Error:\n{result['error_message']}"
         fixed_code = call_gemini(FIXER_PROMPT, fix_input)
         fixed_code = clean_response(fixed_code)
         
-        # Use the fixed code (Gemini should return complete code)
+        # CRITICAL: Validate that the fixer didn't add hypotheses
         if "theorem" in fixed_code:
-            lean_code = fixed_code
+            fixed_theorem_match = re.search(r'theorem\s+\w+\s*\([^)]+\)\s*:', fixed_code)
+            fixed_theorem_sig = fixed_theorem_match.group(0) if fixed_theorem_match else ""
+            
+            # Count hypotheses in each
+            original_hyp_count = original_theorem_sig.count('(')
+            fixed_hyp_count = fixed_theorem_sig.count('(')
+            
+            if fixed_hyp_count > original_hyp_count:
+                # FIXER ADDED HYPOTHESES - this is cheating!
+                print(f"[{filename}] REJECTED: Fixer tried to add hypotheses to make proof pass")
+                logs.append(f"Attempt {retries}: REJECTED - fixer added hypotheses")
+                # Don't use the fixed code, keep original to ensure it fails
+                break
+            else:
+                lean_code = fixed_code
         
         print(f"[{filename}] Re-verifying...")
         result = lean_driver.run_verification(lean_code)
