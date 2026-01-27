@@ -131,8 +131,9 @@ class PythonToLeanTranslator(ast.NodeVisitor):
             target = first.targets[0]
             if isinstance(target, ast.Name):
                 value = self._translate_expr(first.value)
-                rest_code = self._translate_guard_pattern(rest, indent + 2).lstrip()
-                return f"{prefix}let {target.id} := {value}\n{prefix}{rest_code}"
+                # Keep same indentation for continuation after let
+                rest_code = self._translate_guard_pattern(rest, indent)
+                return f"{prefix}let {target.id} := {value}\n{rest_code}"
         
         # Handle if statement (guard)
         if isinstance(first, ast.If):
@@ -195,8 +196,13 @@ class PythonToLeanTranslator(ast.NodeVisitor):
                 return self._translate_if(stmt, 0).strip()
         
         if let_bindings and return_expr:
-            # Combine let bindings with return
-            return "\n    ".join(let_bindings) + f"\n    {return_expr}"
+            # Combine let bindings with return - use newline and consistent formatting
+            # In Lean 4, let bindings in expressions need proper structure
+            result = let_bindings[0]
+            for binding in let_bindings[1:]:
+                result += f"; {binding}"
+            result += f"; {return_expr}"
+            return result
         
         return return_expr or "sorry"
     
