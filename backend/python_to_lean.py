@@ -341,8 +341,8 @@ def translate_with_theorem(python_code: str) -> str:
         Complete Lean 4 code with functions and theorem
     """
     # REQUIRED Mathlib imports for tactics
+    # Note: omega is built into Lean 4 std, only SplitIfs needs Mathlib
     imports = """import Mathlib.Tactic.SplitIfs
-import Mathlib.Tactic.Omega
 
 """
     
