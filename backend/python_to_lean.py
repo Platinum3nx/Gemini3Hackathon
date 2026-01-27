@@ -340,6 +340,12 @@ def translate_with_theorem(python_code: str) -> str:
     Returns:
         Complete Lean 4 code with functions and theorem
     """
+    # REQUIRED Mathlib imports for tactics
+    imports = """import Mathlib.Tactic.SplitIfs
+import Mathlib.Tactic.Omega
+
+"""
+    
     # Step 1: Translate functions
     lean_functions = translate_python_to_lean(python_code)
     
@@ -365,8 +371,8 @@ def translate_with_theorem(python_code: str) -> str:
     # Step 3: Generate theorem
     theorem = generate_theorem(main_func, first_param)
     
-    # Step 4: Combine
-    return f"{lean_functions}\n\n{theorem}"
+    # Step 4: Combine with imports
+    return f"{imports}{lean_functions}\n\n{theorem}"
 
 
 # Quick test
