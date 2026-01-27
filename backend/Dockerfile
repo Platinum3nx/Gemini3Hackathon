@@ -18,8 +18,7 @@ RUN curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -
 # 4. Set working directory
 WORKDIR /app
 
-# 5. Copy the veritas_proofs Lean project FIRST (for Mathlib setup)
-# Build context is repo root, so veritas_proofs is at the top level
+# 5. Copy the veritas_proofs Lean project (now inside backend/)
 COPY veritas_proofs ./veritas_proofs
 
 # 6. Download Mathlib cache (required for split_ifs tactic)
@@ -30,11 +29,11 @@ RUN lake update && lake exe cache get
 WORKDIR /app
 
 # 8. Install Python dependencies
-COPY backend/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 9. Copy backend code
-COPY backend ./backend
+COPY . ./backend
 
 # 10. Setup environment
 EXPOSE 8000
