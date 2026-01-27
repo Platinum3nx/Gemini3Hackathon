@@ -12,31 +12,35 @@ RUN apt-get update && apt-get install -y \
 ENV ELAN_HOME="/usr/local/elan"
 ENV PATH="${ELAN_HOME}/bin:${PATH}"
 
-# 3. Install elan and Lean 4 stable into that global directory
-RUN curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain stable
+# 3. Install elan and the specific Lean 4 version
+RUN curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain leanprover/lean4:v4.26.0
 
-# 4. Explicitly set the default toolchain again to be safe
-RUN elan default stable
-
-# 5. Set working directory
+# 4. Set working directory
 WORKDIR /app
 
-# 6. Install Python dependencies
-COPY requirements.txt .
+# 5. Copy the veritas_proofs Lean project FIRST (for Mathlib setup)
+# Build context is repo root, so veritas_proofs is at the top level
+COPY veritas_proofs ./veritas_proofs
+
+# 6. Download Mathlib cache (required for split_ifs tactic)
+WORKDIR /app/veritas_proofs
+RUN lake update && lake exe cache get
+
+# 7. Return to app directory
+WORKDIR /app
+
+# 8. Install Python dependencies
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 7. Copy backend code
-COPY . ./backend
+# 9. Copy backend code
+COPY backend ./backend
 
-# 8. Create proofs directory (The fix from before)
-RUN mkdir -p /app/veritas_proofs && chmod 777 /app/veritas_proofs
-
-# 9. Setup environment
+# 10. Setup environment
 EXPOSE 8000
 ENV PYTHONPATH=/app
 
-# 10. Entrypoint
-COPY entrypoint.sh /app/backend/entrypoint.sh
+# 11. Entrypoint
 RUN chmod +x /app/backend/entrypoint.sh
 
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
