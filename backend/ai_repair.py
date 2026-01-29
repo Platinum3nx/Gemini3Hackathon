@@ -18,7 +18,7 @@ import google.generativeai as genai
 load_dotenv(os.path.join(os.path.dirname(__file__), '../.env'))
 
 # --- CONFIGURATION ---
-MODEL_NAME = "gemini-2.5-pro-preview-05-06"
+MODEL_NAME = "gemini-3-pro-preview"
 
 # --- REPAIR PROMPT ---
 REPAIR_PROMPT = """You are a Formal Verification Security Engineer.
@@ -90,9 +90,26 @@ def generate_fix(vulnerable_code: str, lean_error_message: str) -> str:
         lean_error_message=lean_error_message
     )
     
-    # Generate the fix
-    print("[AI Repair] Asking Gemini to generate a fix...")
-    response = model.generate_content(prompt)
+    # Generate the fix with robust error handling
+    print(f"[AI Repair] Asking Gemini ({MODEL_NAME}) to generate a fix...")
+    
+    try:
+        response = model.generate_content(prompt)
+    except Exception as e:
+        error_str = str(e).lower()
+        # Check for 404 / NotFound errors
+        if "404" in error_str or "not found" in error_str or "notfound" in error_str:
+            print(f"[AI Repair] ERROR: Model '{MODEL_NAME}' not found (404)")
+            print("[AI Repair] Listing all available models...")
+            try:
+                available_models = genai.list_models()
+                print("[AI Repair] Available models:")
+                for m in available_models:
+                    print(f"  - {m.name}")
+            except Exception as list_error:
+                print(f"[AI Repair] Could not list models: {list_error}")
+        # Re-raise the original exception
+        raise
     
     # Extract the response text
     fixed_code = response.text.strip()
