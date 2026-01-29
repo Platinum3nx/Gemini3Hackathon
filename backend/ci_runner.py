@@ -7,6 +7,7 @@ Integrates the Neuro-Symbolic Repair Loop:
 2. If VULNERABLE, attempt AI-powered repair using Gemini
 3. Verify the fix to ensure it actually passes
 4. Generate comprehensive report
+5. Create auto-remediation PR with verified fixes
 """
 
 import os
@@ -15,6 +16,7 @@ import json
 from backend import repo_manager
 from backend import agents
 from backend.ai_repair import generate_fix
+from backend.github_service import GitHubService
 
 
 def attempt_repair(filename: str, original_code: str, lean_error: str, repo_path: str) -> dict:
@@ -175,6 +177,57 @@ def generate_report(results: list) -> int:
     return 1 if has_failure else 0
 
 
+def create_remediation_pr(all_fixed_content: dict, all_proofs: dict) -> str:
+    """
+    Create an auto-remediation PR with all verified fixes.
+    
+    Args:
+        all_fixed_content: Dict mapping filenames to fixed code
+        all_proofs: Dict mapping filenames to Lean proofs
+        
+    Returns:
+        URL of the created PR, or None if failed
+    """
+    # Get GitHub environment variables
+    github_token = os.getenv("GITHUB_TOKEN")
+    repo_name = os.getenv("GITHUB_REPOSITORY")
+    branch_name = os.getenv("GITHUB_REF_NAME")
+    
+    if not github_token:
+        print("[PR Creation] GITHUB_TOKEN not set, skipping PR creation")
+        return None
+    
+    if not repo_name:
+        print("[PR Creation] GITHUB_REPOSITORY not set, skipping PR creation")
+        return None
+    
+    if not branch_name:
+        print("[PR Creation] GITHUB_REF_NAME not set, using 'main' as default")
+        branch_name = "main"
+    
+    try:
+        print(f"\n{'='*50}")
+        print("Creating Auto-Remediation Pull Request...")
+        print(f"{'='*50}")
+        print(f"  Repository: {repo_name}")
+        print(f"  Base branch: {branch_name}")
+        print(f"  Files to fix: {list(all_fixed_content.keys())}")
+        
+        github_service = GitHubService(token=github_token)
+        pr_url = github_service.create_fix_pr(
+            repo_name=repo_name,
+            original_branch=branch_name,
+            fixes=all_fixed_content,
+            proofs=all_proofs
+        )
+        
+        return pr_url
+        
+    except Exception as e:
+        print(f"[PR Creation] Error: {e}")
+        return None
+
+
 def main():
     repo_path = os.environ.get("REPO_PATH", ".")
     print(f"Scanning repository at: {repo_path}")
@@ -193,6 +246,10 @@ def main():
     print(f"Auditing {len(critical_files)} files: {critical_files}")
     
     results = []
+    
+    # Data collection for PR creation
+    all_fixed_content = {}
+    all_proofs = {}
     
     # 2. Audit loop with repair
     for filename in critical_files:
@@ -237,6 +294,11 @@ def main():
                     result["fixed_code"] = repair_result.get("fixed_code")
                     result["fixed_filename"] = repair_result.get("fixed_filename")
                     print(f"[{filename}] Status updated to AUTO_PATCHED")
+                    
+                    # Capture fix for PR creation
+                    # Store the fixed content using the ORIGINAL filename (so PR updates the original file)
+                    all_fixed_content[filename] = repair_result.get("fixed_code")
+                    all_proofs[filename] = repair_result.get("fixed_proof", "Proof not available")
             
             results.append(result)
             
@@ -256,6 +318,17 @@ def main():
     
     exit_code = generate_report(results)
     
+    # 4. Create PR if there are fixes
+    if all_fixed_content:
+        pr_url = create_remediation_pr(all_fixed_content, all_proofs)
+        if pr_url:
+            print(f"\n🚀 Argus Auto-Remediation PR Created: {pr_url}")
+        else:
+            print("\n⚠️ Could not create auto-remediation PR")
+    else:
+        print("\n📝 No fixes to submit (all files secure or unfixable)")
+    
+    # 5. Final status
     if exit_code == 0:
         print("\n✅ Audit PASSED")
     else:
