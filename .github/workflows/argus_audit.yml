@@ -1,0 +1,41 @@
+# Argus Security Audit with Auto-Remediation
+#
+# This workflow runs Argus on every push and pull request.
+# It will automatically create a PR with verified security fixes
+# if any vulnerabilities are found and successfully repaired.
+#
+# Required secrets:
+#   - GEMINI_API_KEY: Your Google AI Studio API key
+#
+# Permissions needed:
+#   - contents: write (to create fix branches)
+#   - pull-requests: write (to create PRs)
+
+name: Argus Security Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Required permissions for Auto-Remediation PR creation
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  argus-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Run Argus AI Auditor
+        uses: Platinum3nx/Argus@main
+        with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+        env:
+          # Pass the GitHub token for auto-remediation PR creation
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

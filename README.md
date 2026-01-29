@@ -148,6 +148,11 @@ on:
   pull_request:
     branches: [main]
 
+# Required for Auto-Remediation PR creation
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   argus-check:
     runs-on: ubuntu-latest
@@ -160,6 +165,8 @@ jobs:
         uses: Platinum3nx/Argus@main
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ### 2. Add your Gemini API Key
@@ -168,9 +175,11 @@ jobs:
 2. Add a new secret: `GEMINI_API_KEY`
 3. Get your key from [Google AI Studio](https://aistudio.google.com/apikey)
 
+> **Note:** `GITHUB_TOKEN` is automatically provided by GitHub Actions — no setup needed!
+
 ### 3. Push code and see results!
 
-Argus will automatically audit Python files and attempt to fix any vulnerabilities.
+Argus will automatically audit Python files, fix vulnerabilities, and open a PR with verified fixes.
 
 ---
 
