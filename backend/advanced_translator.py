@@ -393,10 +393,13 @@ def _deterministic_membership_translation(python_code: str) -> str | None:
                                     if checked_var == element_param and list_var == list_param:
                                         print(f"[Deterministic] ✅ PATTERN MATCHED! Generating Lean code...")
                                         # Generate deterministic Lean translation
+                                        # NOTE: split_ifs generates case tags `pos` and `neg`, not `isTrue`/`isFalse`
+                                        # Using `aesop` for disjointness proof as it's reliable across Mathlib versions
                                         lean_code = f'''import Mathlib.Tactic.SplitIfs
 import Mathlib.Data.List.Basic
 import Mathlib.Data.List.Nodup
 import Mathlib.Tactic.Linarith
+import Aesop
 
 def {func_name} ({list_param} : List Int) ({element_param} : Int) : List Int :=
   if {element_param} ∈ {list_param} then {list_param} else {list_param} ++ [{element_param}]
@@ -405,18 +408,12 @@ theorem {func_name}_preserves_nodup ({list_param} : List Int) ({element_param} :
   ({func_name} {list_param} {element_param}).Nodup := by
   unfold {func_name}
   split_ifs with h_mem
-  case isTrue =>
+  case pos =>
     exact h
-  case isFalse =>
-    apply List.nodup_append.mpr
-    constructor
-    · exact h
-    constructor
-    · exact List.nodup_singleton {element_param}
-    · intro x hx h_in_new
-      simp only [List.mem_singleton] at h_in_new
-      rw [h_in_new] at hx
-      exact h_mem hx
+  case neg =>
+    rw [List.nodup_append]
+    refine ⟨h, List.nodup_singleton {element_param}, ?_⟩
+    aesop
 '''
                                         return lean_code
                                     else:
