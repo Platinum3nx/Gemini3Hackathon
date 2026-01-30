@@ -115,29 +115,80 @@ def triage_files(file_list: list[str]) -> list[str]:
 
 from . import lean_driver
 from . import python_to_lean
+from . import advanced_translator
+
+def _is_complex_code(code: str) -> bool:
+    """
+    Detect if Python code requires the advanced (LLM-based) translator.
+    
+    Returns True if code contains:
+    - List type hints or operations
+    - Set operations
+    - Complex data structures
+    - List comprehensions
+    """
+    complex_patterns = [
+        "List[",           # Type hints: List[int], List[str]
+        "Set[",            # Set type hints
+        "Dict[",           # Dictionary type hints
+        " in ",            # Membership checks
+        ".append(",        # List append
+        ".extend(",        # List extend
+        ".remove(",        # List/set remove
+        ".add(",           # Set add
+        " for ",           # Comprehensions or loops
+        "Optional[",       # Optional type hints
+        "Tuple[",          # Tuple type hints
+        "sorted(",         # Sorted operations
+        "filter(",         # Filter operations
+        "map(",            # Map operations
+        "# No duplicates", # Invariant comments
+        "# unique",
+        "# sorted",
+        "# non-empty",
+    ]
+    
+    code_lower = code.lower()
+    for pattern in complex_patterns:
+        if pattern.lower() in code_lower:
+            return True
+    
+    return False
+
 
 def audit_file(filename: str, code: str) -> dict:
     """
-    Audits a single file using FULLY DETERMINISTIC translation:
-    1. AST Parser translates Python -> Lean functions (100% reliable)
-    2. Template generates verification theorem (100% reliable)
-    3. Lean compiler proves or disproves the theorem
+    Audits a single file using hybrid translation:
     
-    Gemini is ONLY used for fixing failed proofs.
+    1. Simple code (arithmetic): Uses deterministic AST translator
+    2. Complex code (lists, sets): Uses Gemini-powered advanced translator
+    3. Lean compiler verifies the translation
+    
+    The neuro-symbolic approach ensures AI translations are mathematically verified.
     
     Returns a dictionary with the final status and details.
     """
     original_code = code
     logs = []
     
-    # Step 1: Fully deterministic translation (NO LLM)
-    print(f"[{filename}] Step 1: Deterministic translation (Python -> Lean)...")
-    lean_code = python_to_lean.translate_with_theorem(code)
-    logs.append("Deterministic translation completed (functions + theorem)")
+    # Determine which translator to use
+    use_advanced = _is_complex_code(code)
     
-    # Check for parse errors
-    if lean_code.startswith("-- PARSE_ERROR"):
-        print(f"[{filename}] Python parse error. Flagging as VULNERABLE.")
+    if use_advanced:
+        # Use advanced Gemini-powered translator for complex code
+        print(f"[{filename}] Step 1: Advanced translation (Complex Python → Lean)...")
+        print(f"[{filename}] Detected: Lists, membership, or complex operations")
+        lean_code = advanced_translator.translate_advanced(code)
+        logs.append("Advanced (LLM-based) translation for complex code")
+    else:
+        # Use simple deterministic translator for basic arithmetic
+        print(f"[{filename}] Step 1: Deterministic translation (Python → Lean)...")
+        lean_code = python_to_lean.translate_with_theorem(code)
+        logs.append("Deterministic translation completed (functions + theorem)")
+    
+    # Check for translation errors
+    if lean_code.startswith("-- PARSE_ERROR") or lean_code.startswith("-- ERROR"):
+        print(f"[{filename}] Translation error. Flagging as VULNERABLE.")
         return {
             "filename": filename,
             "status": "VULNERABLE",
@@ -145,7 +196,7 @@ def audit_file(filename: str, code: str) -> dict:
             "proof": lean_code,
             "original_code": original_code,
             "fixed_code": None,
-            "logs": ["Python code has syntax errors and could not be parsed."]
+            "logs": ["Code could not be translated to Lean."]
         }
     
     # Step 2: Verification
