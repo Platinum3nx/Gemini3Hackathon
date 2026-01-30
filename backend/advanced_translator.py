@@ -83,49 +83,92 @@ Your task is to translate Python code into Lean 4 with appropriate safety theore
 | `for x in items: ...` | Use `List.map`, `List.filter`, or recursion |
 | `return value` | Just `value` (last expression) |
 
-### 3. Invariant Generation from Comments
+### 3. CRITICAL RULE: NO "MAGIC" ASSUMPTIONS
 
-When you see comments indicating invariants, generate appropriate theorems:
+⚠️ **THIS IS THE MOST IMPORTANT RULE** ⚠️
 
-| Comment Pattern | Lean Theorem |
-|----------------|--------------|
-| "No duplicates" / "unique" | `List.Nodup result` |
-| "sorted" / "in order" | `List.Sorted (· ≤ ·) result` |
-| "non-empty" | `result ≠ []` or `result.length > 0` |
-| "positive" / "non-negative" | `∀ x ∈ result, x ≥ 0` |
-| "balance >= 0" | `result ≥ 0` |
-| "within bounds" | Use interval predicates |
+When generating the Lean theorem, you MUST NOT add preconditions (hypotheses) 
+unless they are **explicitly enforced by the Python code** (e.g., an `if` statement, 
+`assert`, or explicit check).
 
-### 4. Common Safety Theorems
+**WHY THIS MATTERS:**
+Adding assumptions that the code doesn't check allows buggy code to falsely pass verification.
+The goal is for verification to FAIL if the code is missing required checks.
 
-Generate theorems based on the code's domain:
+**EXAMPLES:**
 
-**Financial/Balance Operations:**
+❌ **INCORRECT** - Adds assumption the code doesn't enforce:
 ```lean
+-- WRONG! This assumes new_id ∉ existing_ids but the Python code never checks this
+theorem safe (ids : List Int) (new : Int) (h : new ∉ ids) : 
+  (add_product_id ids new).Nodup := by ...
+```
+
+✅ **CORRECT** - Only assumes what WILL be true (input is valid):
+```lean
+-- RIGHT! This only assumes the INPUT list is valid, not that new ∉ ids
+-- This theorem WILL FAIL if the code blindly appends without checking
+theorem safe (ids : List Int) (new : Int) (h_input : ids.Nodup) : 
+  (add_product_id ids new).Nodup := by ...
+```
+
+**ALLOWED ASSUMPTIONS:**
+- Properties of INPUTS that are documented (e.g., "ids is assumed unique" → `h : ids.Nodup`)
+- Properties enforced by type system (e.g., `Int` is an integer)
+- Starting state validity (e.g., `balance ≥ 0` for financial code)
+
+**FORBIDDEN ASSUMPTIONS:**
+- Properties that would make the code work but aren't checked (e.g., `new ∉ ids`)
+- Properties the function should enforce but doesn't
+- Any condition that "fixes" the bug in the theorem instead of the code
+
+### 4. Invariant Generation from Comments
+
+When you see comments indicating invariants, generate theorems that TEST the code:
+
+| Comment Pattern | Theorem Goal | What Should Happen |
+|----------------|--------------|-------------------|
+| "No duplicates" | `input.Nodup → output.Nodup` | FAIL if code doesn't guard |
+| "sorted" | `input.Sorted → output.Sorted` | FAIL if code breaks order |
+| "non-negative" | `input ≥ 0 → output ≥ 0` | FAIL if code allows negative |
+
+### 5. Correct Safety Theorem Examples
+
+**Financial/Balance Operations (assumes starting balance is valid):**
+```lean
+-- Only assumes STARTING balance is valid
+-- Does NOT assume amount <= balance - the code must check this!
 theorem balance_non_negative (balance amount : Int) (h : balance ≥ 0) :
   withdraw balance amount ≥ 0 := by
   unfold withdraw
   split_ifs <;> omega
 ```
 
-**List Operations (No Duplicates):**
+**List Operations - CORRECT (will FAIL for buggy code):**
 ```lean
-theorem add_preserves_nodup (l : List Int) (x : Int) (h_nodup : l.Nodup) (h_not_mem : x ∉ l) :
-  (l ++ [x]).Nodup := by
-  apply List.Nodup.append h_nodup
-  · simp [List.Nodup]
-  · simp [List.disjoint_singleton]
-    exact h_not_mem
+-- Only assumes INPUT list has no duplicates
+-- Does NOT assume new_id ∉ ids - if code doesn't check, this MUST FAIL
+theorem add_preserves_nodup (ids : List Int) (new : Int) (h : ids.Nodup) :
+  (add_product_id ids new).Nodup := by
+  unfold add_product_id
+  -- This will FAIL because we can't prove nodup without the guard!
+  sorry
 ```
 
-**Membership Checks:**
+**List Operations - after code is FIXED:**
 ```lean
-theorem member_after_add (l : List Int) (x : Int) :
-  x ∈ l ++ [x] := by
-  simp
+-- This should PASS after the code adds: if new ∈ ids then ids else ids ++ [new]
+theorem add_preserves_nodup (ids : List Int) (new : Int) (h : ids.Nodup) :
+  (add_product_id ids new).Nodup := by
+  unfold add_product_id
+  split_ifs with h_mem
+  · exact h  -- if new ∈ ids, we return ids unchanged
+  · apply List.Nodup.append h
+    · simp
+    · simp [List.disjoint_singleton]; exact h_mem
 ```
 
-### 5. Required Imports
+### 6. Required Imports
 
 Always include these imports at the top:
 ```lean
@@ -135,13 +178,14 @@ import Mathlib.Data.List.Nodup
 import Mathlib.Tactic.Linarith
 ```
 
-### 6. Tactic Strategies
+### 7. Tactic Strategies
 
 Use these tactics for proofs:
 - `omega` - for linear integer arithmetic
 - `linarith` - fallback for complex linear arithmetic
 - `simp` - for list simplifications
 - `split_ifs` - for if-then-else branching
+- `sorry` - USE THIS if the proof cannot be completed (indicates buggy code!)
 
 ## OUTPUT FORMAT
 
