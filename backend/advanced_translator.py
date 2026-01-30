@@ -83,6 +83,31 @@ Your task is to translate Python code into Lean 4 with appropriate safety theore
 | `for x in items: ...` | Use `List.map`, `List.filter`, or recursion |
 | `return value` | Just `value` (last expression) |
 
+#### ⚠️ CRITICAL: Membership Guards (if x in list)
+This is the MOST IMPORTANT translation. When you see:
+
+**Python:**
+```python
+if new_id in existing_ids:
+    return existing_ids
+return existing_ids + [new_id]
+```
+
+**You MUST translate to Lean:**
+```lean
+def add_product_id (existing_ids : List Int) (new_id : Int) : List Int :=
+  if new_id ∈ existing_ids then existing_ids else existing_ids ++ [new_id]
+```
+
+**NEVER translate it as:**
+```lean
+-- WRONG! This ignores the guard!
+def add_product_id (existing_ids : List Int) (new_id : Int) : List Int :=
+  existing_ids ++ [new_id]
+```
+
+The `if x in list` → `if x ∈ list then ... else ...` translation is ESSENTIAL for proofs!
+
 ### 3. CRITICAL RULE: NO "MAGIC" ASSUMPTIONS
 
 ⚠️ **THIS IS THE MOST IMPORTANT RULE** ⚠️
