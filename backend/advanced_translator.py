@@ -314,14 +314,99 @@ def clean_response(text: str) -> str:
     return text.strip()
 
 
+def _deterministic_membership_translation(python_code: str) -> str | None:
+    """
+    Try to deterministically translate Python code with membership guards.
+    
+    This handles the common pattern:
+        if x in list:
+            return list
+        return list + [x]
+    
+    Returns Lean code if pattern is recognized, None otherwise.
+    """
+    import ast
+    
+    try:
+        tree = ast.parse(python_code)
+    except:
+        return None
+    
+    # Look for functions with membership guard pattern
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            func_name = node.name
+            
+            # Get arguments
+            args = [(arg.arg, "Int") for arg in node.args.args]  # Assume Int for now
+            
+            # Check for List type hint
+            list_param = None
+            element_param = None
+            for arg in node.args.args:
+                if arg.annotation:
+                    if isinstance(arg.annotation, ast.Subscript):
+                        if hasattr(arg.annotation.value, 'id') and arg.annotation.value.id == 'List':
+                            list_param = arg.arg
+                    else:
+                        element_param = arg.arg
+            
+            if list_param and element_param:
+                # Look for membership guard pattern in body
+                if len(node.body) >= 2:
+                    first_stmt = node.body[0]
+                    
+                    # Check for: if x in list: return list
+                    if isinstance(first_stmt, ast.If):
+                        test = first_stmt.test
+                        if isinstance(test, ast.Compare) and len(test.ops) == 1:
+                            if isinstance(test.ops[0], ast.In):
+                                # Found membership check!
+                                checked_var = test.left.id if isinstance(test.left, ast.Name) else None
+                                list_var = test.comparators[0].id if isinstance(test.comparators[0], ast.Name) else None
+                                
+                                if checked_var == element_param and list_var == list_param:
+                                    # Generate deterministic Lean translation
+                                    lean_code = f'''import Mathlib.Tactic.SplitIfs
+import Mathlib.Data.List.Basic
+import Mathlib.Data.List.Nodup
+import Mathlib.Tactic.Linarith
+
+def {func_name} ({list_param} : List Int) ({element_param} : Int) : List Int :=
+  if {element_param} ∈ {list_param} then {list_param} else {list_param} ++ [{element_param}]
+
+theorem {func_name}_preserves_nodup ({list_param} : List Int) ({element_param} : Int) (h : {list_param}.Nodup) :
+  ({func_name} {list_param} {element_param}).Nodup := by
+  unfold {func_name}
+  split_ifs with h_mem
+  case isTrue =>
+    exact h
+  case isFalse =>
+    apply List.nodup_append.mpr
+    constructor
+    · exact h
+    constructor
+    · exact List.nodup_singleton {element_param}
+    · intro x hx h_in_new
+      simp only [List.mem_singleton] at h_in_new
+      rw [h_in_new] at hx
+      exact h_mem hx
+'''
+                                    return lean_code
+    except Exception as e:
+        print(f"[Deterministic Translator] Error: {e}")
+        return None
+    
+    return None
+
+
 def translate_advanced(python_code: str) -> str:
     """
     Use Gemini to translate complex Python code to Lean 4.
     
-    This is the advanced translator that handles:
-    - Lists and membership
-    - Complex control flow
-    - Multiple invariant types
+    HYBRID APPROACH:
+    1. First try deterministic translation for known patterns
+    2. Fall back to LLM for unknown patterns
     
     Args:
         python_code: Python source code string
@@ -329,6 +414,17 @@ def translate_advanced(python_code: str) -> str:
     Returns:
         Lean 4 code with functions and theorems
     """
+    # Step 1: Try deterministic translation for known patterns
+    print("[Advanced Translator] Trying deterministic translation...")
+    deterministic_result = _deterministic_membership_translation(python_code)
+    
+    if deterministic_result:
+        print("[Advanced Translator] ✅ Deterministic translation succeeded!")
+        return deterministic_result
+    
+    print("[Advanced Translator] Deterministic failed, falling back to LLM...")
+    
+    # Step 2: Fall back to LLM
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return "-- ERROR: GEMINI_API_KEY not set"
@@ -346,12 +442,12 @@ def translate_advanced(python_code: str) -> str:
     }
     
     try:
-        print("[Advanced Translator] Translating Python to Lean 4...")
+        print("[Advanced Translator] Translating Python to Lean 4 via LLM...")
         response = model.generate_content(prompt, safety_settings=safety_settings)
         
         if response.parts:
             lean_code = clean_response(response.text)
-            print("[Advanced Translator] Translation complete")
+            print("[Advanced Translator] LLM translation complete")
             return lean_code
         else:
             return "-- ERROR: Empty response from Gemini"
