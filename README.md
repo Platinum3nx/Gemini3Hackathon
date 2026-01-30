@@ -167,6 +167,7 @@ jobs:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 ```
 
 > **Feature Branch Support:** Argus automatically detects your current branch (e.g., `feat/login`) and opens fix PRs targeting that branch, not `main`. This lets you fix vulnerabilities directly on feature branches before merging.
