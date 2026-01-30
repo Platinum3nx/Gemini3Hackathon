@@ -26,7 +26,7 @@ REPAIR_PROMPT = """You are a Formal Verification Security Engineer.
 Your task is to fix vulnerable Python code so that it passes formal verification.
 
 ## Context
-The code below failed a Lean 4 formal verification proof. The proof was trying to verify that a safety invariant holds (e.g., balance >= 0 after any operation).
+The code below failed a Lean 4 formal verification proof. The proof was trying to verify that a safety invariant holds (e.g., balance >= 0, no duplicates in list, bounds checking, etc.).
 
 ## Vulnerable Python Code
 ```python
@@ -54,12 +54,39 @@ The code below failed a Lean 4 formal verification proof. The proof was trying t
 - Do NOT include phrases like "Here is the fixed code"
 - The output should be valid Python that can be saved directly to a .py file
 
-## Common Fixes for Financial Code
+## Common Fix Patterns
+
+### Financial/Numeric Code
 - Check that amounts are positive before processing
 - Check that withdrawals don't exceed balance
 - Return the original balance if operation would violate invariant
+- Ensure result >= 0 for balance operations
+
+### List Operations
+- Check membership BEFORE adding to avoid duplicates:
+  `if item not in my_list: return my_list + [item]`
+- Check bounds before accessing by index:
+  `if 0 <= index < len(my_list): return my_list[index]`
+- Check list is non-empty before operations:
+  `if my_list: return operation(my_list)`
+- Validate items before removal:
+  `if item in my_list: return [x for x in my_list if x != item]`
+
+### Set Operations
+- Use set semantics for uniqueness: `set(items)`
+- Check membership before add: `if item not in s: s.add(item)`
+
+### String Operations
+- Check for empty strings: `if s: process(s)`
+- Validate length before slicing: `if len(s) >= n: return s[:n]`
+
+### General Safety
+- Null/None checks: `if value is not None:`
+- Type validation: `if isinstance(value, expected_type):`
+- Bounds validation: `if lower <= value <= upper:`
 
 Generate the fixed Python code now:"""
+
 
 
 def generate_fix(vulnerable_code: str, lean_error_message: str) -> str:
