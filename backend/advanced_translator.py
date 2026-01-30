@@ -186,6 +186,7 @@ theorem add_preserves_nodup (ids : List Int) (new : Int) (h : ids.Nodup) :
       exact h_mem hx1
 ```
 
+
 ### 6. Required Imports
 
 Always include these imports at the top:
@@ -194,7 +195,6 @@ import Mathlib.Tactic.SplitIfs
 import Mathlib.Data.List.Basic
 import Mathlib.Data.List.Nodup
 import Mathlib.Tactic.Linarith
-import Mathlib.Tactic.Omega
 ```
 
 ### 7. Tactic Strategies (in order of preference)

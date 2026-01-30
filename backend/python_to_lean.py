@@ -345,12 +345,11 @@ def translate_with_theorem(python_code: str) -> str:
     # - List.Basic: for list operations (∈, ++, length, etc.)
     # - List.Nodup: for List.Nodup uniqueness proofs
     # - Linarith: powerful fallback for linear arithmetic
-    # - Omega: for linear integer arithmetic
+    # Note: omega is built into Lean 4 std, no explicit import needed
     imports = """import Mathlib.Tactic.SplitIfs
 import Mathlib.Data.List.Basic
 import Mathlib.Data.List.Nodup
 import Mathlib.Tactic.Linarith
-import Mathlib.Tactic.Omega
 
 """
     
