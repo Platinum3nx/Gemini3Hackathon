@@ -11,6 +11,42 @@ from typing import Dict, Any, List
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERITAS_PROJECT_PATH = os.path.join(BASE_DIR, "veritas_proofs")
 
+
+def _contains_sorry(lean_code: str) -> bool:
+    """
+    Check if the Lean code contains 'sorry' - an incomplete proof marker.
+    
+    In Lean 4, 'sorry' is a tactic that allows a proof to compile without
+    actually proving anything. It's essentially a "cheat code" that should
+    NEVER appear in verified production code.
+    
+    We check for:
+    - 'sorry' as a standalone tactic
+    - Ignoring 'sorry' in comments or strings
+    
+    Args:
+        lean_code: The Lean 4 source code
+        
+    Returns:
+        True if the code contains sorry in a proof context
+    """
+    # Remove single-line comments (-- ...)
+    code_no_comments = re.sub(r'--.*$', '', lean_code, flags=re.MULTILINE)
+    
+    # Remove block comments (/- ... -/)
+    code_no_comments = re.sub(r'/\-.*?\-/', '', code_no_comments, flags=re.DOTALL)
+    
+    # Remove string literals
+    code_no_strings = re.sub(r'"[^"]*"', '', code_no_comments)
+    
+    # Check for 'sorry' as a word (not part of another word)
+    # This matches 'sorry' as a tactic
+    if re.search(r'\bsorry\b', code_no_strings):
+        return True
+    
+    return False
+
+
 def run_verification(lean_code: str) -> Dict[str, Any]:
     """
     Writes the code to a temporary .lean file inside the veritas_proofs project.
@@ -46,19 +82,37 @@ def run_verification(lean_code: str) -> Dict[str, Any]:
         return_code = process.returncode
 
         # 3. Process results
-        verified = (return_code == 0)
+        # Initial check: did it compile?
+        compiled = (return_code == 0)
+        
+        # CRITICAL: Check for 'sorry' - this is a "cheat code" that skips proofs
+        # A file with 'sorry' is NOT truly verified, even if it compiles!
+        has_sorry = _contains_sorry(lean_code)
+        
+        if has_sorry:
+            print("[Lean Driver] WARNING: Proof contains 'sorry' - marking as VULNERABLE")
+        
+        # Only SECURE if: compiles AND no sorry
+        verified = compiled and not has_sorry
         
         # Combine stdout and stderr for the full error message if needed, 
         # but usually errors are in stderr or stdout depending on Lean version/configuration.
         # Lean 4 usually puts errors in stderr or stdout.
         full_output = (stdout + "\n" + stderr).strip()
         
+        # Add sorry warning to error message if applicable
+        if has_sorry and compiled:
+            full_output = "WARNING: Proof uses 'sorry' (incomplete proof)\n\n" + full_output
+        
         distinct_errors = []
         if not verified:
+            if has_sorry:
+                distinct_errors.append("Proof contains 'sorry' - incomplete proof detected")
             # Basic parsing to extract distinct errors (one per line or block)
             # This is a simple heuristic; can be improved.
             # Filtering out empty lines and "info:" lines if desired, keeping it simple for now.
-            distinct_errors = [line for line in full_output.splitlines() if line.strip() and "error:" in line]
+            error_lines = [line for line in full_output.splitlines() if line.strip() and "error:" in line]
+            distinct_errors.extend(error_lines)
             if not distinct_errors:
                  # Fallback if no explicit "error:" found but failed
                  distinct_errors = [line for line in full_output.splitlines() if line.strip()]
@@ -66,7 +120,9 @@ def run_verification(lean_code: str) -> Dict[str, Any]:
         return {
             "verified": verified,
             "error_message": full_output,
-            "distinct_errors": distinct_errors
+            "distinct_errors": distinct_errors,
+            "has_sorry": has_sorry,
+            "compiled": compiled
         }
 
     except Exception as e:
