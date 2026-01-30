@@ -329,45 +329,43 @@ def _deterministic_membership_translation(python_code: str) -> str | None:
     
     try:
         tree = ast.parse(python_code)
-    except:
-        return None
-    
-    # Look for functions with membership guard pattern
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef):
-            func_name = node.name
-            
-            # Get arguments
-            args = [(arg.arg, "Int") for arg in node.args.args]  # Assume Int for now
-            
-            # Check for List type hint
-            list_param = None
-            element_param = None
-            for arg in node.args.args:
-                if arg.annotation:
-                    if isinstance(arg.annotation, ast.Subscript):
-                        if hasattr(arg.annotation.value, 'id') and arg.annotation.value.id == 'List':
-                            list_param = arg.arg
-                    else:
-                        element_param = arg.arg
-            
-            if list_param and element_param:
-                # Look for membership guard pattern in body
-                if len(node.body) >= 2:
-                    first_stmt = node.body[0]
-                    
-                    # Check for: if x in list: return list
-                    if isinstance(first_stmt, ast.If):
-                        test = first_stmt.test
-                        if isinstance(test, ast.Compare) and len(test.ops) == 1:
-                            if isinstance(test.ops[0], ast.In):
-                                # Found membership check!
-                                checked_var = test.left.id if isinstance(test.left, ast.Name) else None
-                                list_var = test.comparators[0].id if isinstance(test.comparators[0], ast.Name) else None
-                                
-                                if checked_var == element_param and list_var == list_param:
-                                    # Generate deterministic Lean translation
-                                    lean_code = f'''import Mathlib.Tactic.SplitIfs
+        
+        # Look for functions with membership guard pattern
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                func_name = node.name
+                
+                # Get arguments
+                args = [(arg.arg, "Int") for arg in node.args.args]  # Assume Int for now
+                
+                # Check for List type hint
+                list_param = None
+                element_param = None
+                for arg in node.args.args:
+                    if arg.annotation:
+                        if isinstance(arg.annotation, ast.Subscript):
+                            if hasattr(arg.annotation.value, 'id') and arg.annotation.value.id == 'List':
+                                list_param = arg.arg
+                        else:
+                            element_param = arg.arg
+                
+                if list_param and element_param:
+                    # Look for membership guard pattern in body
+                    if len(node.body) >= 2:
+                        first_stmt = node.body[0]
+                        
+                        # Check for: if x in list: return list
+                        if isinstance(first_stmt, ast.If):
+                            test = first_stmt.test
+                            if isinstance(test, ast.Compare) and len(test.ops) == 1:
+                                if isinstance(test.ops[0], ast.In):
+                                    # Found membership check!
+                                    checked_var = test.left.id if isinstance(test.left, ast.Name) else None
+                                    list_var = test.comparators[0].id if isinstance(test.comparators[0], ast.Name) else None
+                                    
+                                    if checked_var == element_param and list_var == list_param:
+                                        # Generate deterministic Lean translation
+                                        lean_code = f'''import Mathlib.Tactic.SplitIfs
 import Mathlib.Data.List.Basic
 import Mathlib.Data.List.Nodup
 import Mathlib.Tactic.Linarith
@@ -392,7 +390,7 @@ theorem {func_name}_preserves_nodup ({list_param} : List Int) ({element_param} :
       rw [h_in_new] at hx
       exact h_mem hx
 '''
-                                    return lean_code
+                                        return lean_code
     except Exception as e:
         print(f"[Deterministic Translator] Error: {e}")
         return None
