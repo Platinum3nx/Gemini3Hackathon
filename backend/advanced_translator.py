@@ -327,13 +327,17 @@ def _deterministic_membership_translation(python_code: str) -> str | None:
     """
     import ast
     
+    print("[Deterministic] Starting pattern matching...")
+    
     try:
         tree = ast.parse(python_code)
+        print("[Deterministic] AST parsed successfully")
         
         # Look for functions with membership guard pattern
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef):
                 func_name = node.name
+                print(f"[Deterministic] Found function: {func_name}")
                 
                 # Get arguments
                 args = [(arg.arg, "Int") for arg in node.args.args]  # Assume Int for now
@@ -342,35 +346,52 @@ def _deterministic_membership_translation(python_code: str) -> str | None:
                 list_param = None
                 element_param = None
                 for arg in node.args.args:
+                    print(f"[Deterministic] Checking arg: {arg.arg}, has annotation: {arg.annotation is not None}")
                     if arg.annotation:
                         if isinstance(arg.annotation, ast.Subscript):
                             if hasattr(arg.annotation.value, 'id') and arg.annotation.value.id == 'List':
                                 list_param = arg.arg
+                                print(f"[Deterministic] Found list param: {list_param}")
                         else:
                             element_param = arg.arg
+                            print(f"[Deterministic] Found element param: {element_param}")
                 
                 if list_param and element_param:
+                    print(f"[Deterministic] Both params found: list={list_param}, element={element_param}")
+                    
                     # Look for membership guard pattern in body
                     # Skip docstrings - they appear as Expr(Constant(str))
                     body_statements = []
                     for stmt in node.body:
                         if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+                            print(f"[Deterministic] Skipping docstring")
                             continue  # Skip docstring
                         body_statements.append(stmt)
                     
+                    print(f"[Deterministic] Body statements after skipping docstrings: {len(body_statements)}")
+                    
                     if len(body_statements) >= 2:
                         first_stmt = body_statements[0]
+                        print(f"[Deterministic] First statement type: {type(first_stmt).__name__}")
                         
                         # Check for: if x in list: return list
                         if isinstance(first_stmt, ast.If):
                             test = first_stmt.test
+                            print(f"[Deterministic] If test type: {type(test).__name__}")
+                            
                             if isinstance(test, ast.Compare) and len(test.ops) == 1:
+                                print(f"[Deterministic] Compare op: {type(test.ops[0]).__name__}")
+                                
                                 if isinstance(test.ops[0], ast.In):
                                     # Found membership check!
                                     checked_var = test.left.id if isinstance(test.left, ast.Name) else None
                                     list_var = test.comparators[0].id if isinstance(test.comparators[0], ast.Name) else None
                                     
+                                    print(f"[Deterministic] Checked var: {checked_var}, List var: {list_var}")
+                                    print(f"[Deterministic] Expected: checked={element_param}, list={list_param}")
+                                    
                                     if checked_var == element_param and list_var == list_param:
+                                        print(f"[Deterministic] ✅ PATTERN MATCHED! Generating Lean code...")
                                         # Generate deterministic Lean translation
                                         lean_code = f'''import Mathlib.Tactic.SplitIfs
 import Mathlib.Data.List.Basic
@@ -398,10 +419,17 @@ theorem {func_name}_preserves_nodup ({list_param} : List Int) ({element_param} :
       exact h_mem hx
 '''
                                         return lean_code
+                                    else:
+                                        print(f"[Deterministic] Variable names don't match")
+                else:
+                    print(f"[Deterministic] Missing list_param or element_param")
     except Exception as e:
         print(f"[Deterministic Translator] Error: {e}")
+        import traceback
+        traceback.print_exc()
         return None
     
+    print("[Deterministic] No pattern matched, returning None")
     return None
 
 
