@@ -295,6 +295,7 @@ Test files included in `demo_files/`:
 | `wallet_secure.py` | None (correct code) | SECURE |
 | `inventory_manager.py` | No duplicate check | AUTO_PATCHED |
 | `orderProcessor.py` | Missing stock validation | AUTO_PATCHED |
+| `config_with_secrets.py` | Hardcoded API keys | SECRETS_DETECTED |
 
 ---
 
