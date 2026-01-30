@@ -144,28 +144,46 @@ theorem balance_non_negative (balance amount : Int) (h : balance ≥ 0) :
   split_ifs <;> omega
 ```
 
-**List Operations - CORRECT (will FAIL for buggy code):**
+**List Operations - BUGGY CODE (will FAIL):**
 ```lean
--- Only assumes INPUT list has no duplicates
--- Does NOT assume new_id ∉ ids - if code doesn't check, this MUST FAIL
+-- BUGGY: blindly appends without checking membership
+def add_product_id (ids : List Int) (new : Int) : List Int :=
+  ids ++ [new]
+
+-- This theorem CANNOT be proven because the code is buggy!
+-- The proof will fail, correctly flagging this as VULNERABLE
 theorem add_preserves_nodup (ids : List Int) (new : Int) (h : ids.Nodup) :
   (add_product_id ids new).Nodup := by
   unfold add_product_id
-  -- This will FAIL because we can't prove nodup without the guard!
-  sorry
+  -- Cannot prove: new might already be in ids!
+  sorry  -- This will be detected and marked VULNERABLE
 ```
 
-**List Operations - after code is FIXED:**
+**List Operations - FIXED CODE (will PASS):**
 ```lean
--- This should PASS after the code adds: if new ∈ ids then ids else ids ++ [new]
+-- FIXED: checks membership before appending
+def add_product_id (ids : List Int) (new : Int) : List Int :=
+  if new ∈ ids then ids else ids ++ [new]
+
+-- This theorem CAN be proven because the code is correct!
 theorem add_preserves_nodup (ids : List Int) (new : Int) (h : ids.Nodup) :
   (add_product_id ids new).Nodup := by
   unfold add_product_id
   split_ifs with h_mem
-  · exact h  -- if new ∈ ids, we return ids unchanged
-  · apply List.Nodup.append h
-    · simp
-    · simp [List.disjoint_singleton]; exact h_mem
+  case isTrue => 
+    -- new ∈ ids, so we return ids unchanged
+    exact h
+  case isFalse =>
+    -- new ∉ ids, so appending preserves Nodup
+    apply List.nodup_append.mpr
+    constructor
+    · exact h
+    constructor  
+    · exact List.nodup_singleton new
+    · intro x hx1 hx2
+      simp only [List.mem_singleton] at hx2
+      rw [hx2] at hx1
+      exact h_mem hx1
 ```
 
 ### 6. Required Imports
@@ -176,16 +194,41 @@ import Mathlib.Tactic.SplitIfs
 import Mathlib.Data.List.Basic
 import Mathlib.Data.List.Nodup
 import Mathlib.Tactic.Linarith
+import Mathlib.Tactic.Omega
 ```
 
-### 7. Tactic Strategies
+### 7. Tactic Strategies (in order of preference)
 
-Use these tactics for proofs:
-- `omega` - for linear integer arithmetic
-- `linarith` - fallback for complex linear arithmetic
-- `simp` - for list simplifications
-- `split_ifs` - for if-then-else branching
-- `sorry` - USE THIS if the proof cannot be completed (indicates buggy code!)
+Use these tactics for proofs. Try them in order:
+
+**For if-then-else branching:**
+```lean
+split_ifs with h_cond
+case isTrue => <proof for true branch>
+case isFalse => <proof for false branch>
+```
+
+**For List.Nodup preservation:**
+```lean
+apply List.nodup_append.mpr
+constructor
+· <prove first list is nodup>
+constructor
+· <prove second list is nodup (usually simp for singleton)>
+· <prove lists are disjoint>
+```
+
+**For linear arithmetic:**
+- `omega` — Primary choice for Int arithmetic
+- `linarith` — Fallback for complex linear constraints
+- `simp` — For simplification
+
+**For membership/disjointness:**
+- `simp only [List.mem_singleton]` — For singleton membership
+- `intro x hx1 hx2` — For proving disjointness
+
+**CRITICAL: Never use `sorry` in final proofs!**
+If you cannot complete the proof, the code is buggy and should fail verification.
 
 ## OUTPUT FORMAT
 

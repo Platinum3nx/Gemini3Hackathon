@@ -163,6 +163,7 @@ def audit_file(filename: str, code: str) -> dict:
     1. Simple code (arithmetic): Uses deterministic AST translator
     2. Complex code (lists, sets): Uses Gemini-powered advanced translator
     3. Lean compiler verifies the translation
+    4. If verification finds sorry, try tactic substitution
     
     The neuro-symbolic approach ensures AI translations are mathematically verified.
     
@@ -204,6 +205,35 @@ def audit_file(filename: str, code: str) -> dict:
     result = lean_driver.run_verification(lean_code)
     
     initial_verified = result["verified"]
+    has_sorry = result.get("has_sorry", False)
+    
+    # If failed due to sorry, try tactic substitution
+    if not initial_verified and has_sorry:
+        print(f"[{filename}] Step 2b: Attempting tactic substitution (removing sorry)...")
+        logs.append("Initial proof contained 'sorry', attempting tactic substitution")
+        
+        # Try common tactic replacements for sorry
+        tactic_substitutions = [
+            ("sorry", "decide"),
+            ("sorry", "native_decide"),
+            ("sorry", "trivial"),
+            ("sorry", "rfl"),
+            ("sorry", "simp"),
+        ]
+        
+        for old_tactic, new_tactic in tactic_substitutions:
+            modified_code = lean_code.replace(old_tactic, new_tactic)
+            if modified_code != lean_code:
+                print(f"[{filename}] Trying: {old_tactic} → {new_tactic}")
+                retry_result = lean_driver.run_verification(modified_code)
+                if retry_result["verified"]:
+                    print(f"[{filename}] ✅ Tactic substitution succeeded: {new_tactic}")
+                    logs.append(f"Tactic substitution succeeded: {old_tactic} → {new_tactic}")
+                    result = retry_result
+                    lean_code = modified_code
+                    initial_verified = True
+                    break
+    
     logs.append(f"Verification: {'PASSED' if initial_verified else 'FAILED'}")
     
     if not initial_verified and result.get("error_message"):
