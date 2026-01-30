@@ -351,8 +351,15 @@ def _deterministic_membership_translation(python_code: str) -> str | None:
                 
                 if list_param and element_param:
                     # Look for membership guard pattern in body
-                    if len(node.body) >= 2:
-                        first_stmt = node.body[0]
+                    # Skip docstrings - they appear as Expr(Constant(str))
+                    body_statements = []
+                    for stmt in node.body:
+                        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+                            continue  # Skip docstring
+                        body_statements.append(stmt)
+                    
+                    if len(body_statements) >= 2:
+                        first_stmt = body_statements[0]
                         
                         # Check for: if x in list: return list
                         if isinstance(first_stmt, ast.If):
