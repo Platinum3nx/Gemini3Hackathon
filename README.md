@@ -144,9 +144,9 @@ name: Argus Security Audit
 
 on:
   push:
-    branches: [main]
+    branches: ['**']  # Runs on ALL branches (main, feature branches, etc.)
   pull_request:
-    branches: [main]
+    branches: ['**']
 
 # Required for Auto-Remediation PR creation
 permissions:
@@ -168,6 +168,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+> **Feature Branch Support:** Argus automatically detects your current branch (e.g., `feat/login`) and opens fix PRs targeting that branch, not `main`. This lets you fix vulnerabilities directly on feature branches before merging.
 
 ### 2. Add your Gemini API Key
 
