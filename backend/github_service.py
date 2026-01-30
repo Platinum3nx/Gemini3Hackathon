@@ -134,6 +134,30 @@ class GitHubService:
             return pr.html_url
             
         except GithubException as e:
+            error_msg = str(e)
+            
+            # Check for the specific "not permitted to create PRs" error
+            if "GitHub Actions is not permitted" in error_msg or "pull requests" in error_msg.lower():
+                print("")
+                print("╔" + "═" * 60 + "╗")
+                print("║" + " ⚠️  PR CREATION BLOCKED BY REPO SETTINGS".center(60) + "║")
+                print("╠" + "═" * 60 + "╣")
+                print("║" + "".center(60) + "║")
+                print("║" + " To fix this:".ljust(60) + "║")
+                print("║" + "".center(60) + "║")
+                print("║" + " 1. Go to Repo Settings > Actions > General".ljust(60) + "║")
+                print("║" + " 2. Scroll to 'Workflow permissions'".ljust(60) + "║")
+                print("║" + " 3. Check 'Allow GitHub Actions to create and".ljust(60) + "║")
+                print("║" + "    approve pull requests'".ljust(60) + "║")
+                print("║" + "".center(60) + "║")
+                print("║" + " Then re-run this workflow.".ljust(60) + "║")
+                print("║" + "".center(60) + "║")
+                print("╚" + "═" * 60 + "╝")
+                print("")
+                # Return None instead of crashing
+                return None
+            
+            # For other errors, raise as before
             raise RuntimeError(f"Could not create PR: {e}")
     
     def _generate_pr_body(
