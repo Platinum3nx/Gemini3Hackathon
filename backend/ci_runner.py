@@ -17,6 +17,7 @@ from backend import repo_manager
 from backend import agents
 from backend.ai_repair import generate_fix
 from backend.github_service import GitHubService
+from backend.secrets_scanner import scan_repo, format_findings_for_report
 
 
 def attempt_repair(filename: str, original_code: str, lean_error: str, repo_path: str) -> dict:
@@ -93,11 +94,11 @@ def attempt_repair(filename: str, original_code: str, lean_error: str, repo_path
         }
 
 
-def generate_report(results: list) -> int:
+def generate_report(results: list, secrets_findings: list = None) -> int:
     """
     Generates a Markdown report and writes it to Argus_Audit_Report.md
     and GITHUB_STEP_SUMMARY if available.
-    Returns 1 if any file failed verification (and repair), 0 otherwise.
+    Returns 1 if any file failed verification (and repair) or secrets found, 0 otherwise.
     """
     report_lines = ["# Argus AI Audit Report", "", "## Summary"]
     
@@ -112,10 +113,21 @@ def generate_report(results: list) -> int:
     report_lines.append(f"- **❌ Vulnerable:** {vulnerable}")
     report_lines.append("")
     
-    # Only fail if there are truly unfixed vulnerabilities
-    has_failure = vulnerable > 0
+    # Only fail if there are truly unfixed vulnerabilities or HIGH severity secrets
+    high_secrets = [f for f in (secrets_findings or []) if f.severity == "HIGH"]
+    has_failure = vulnerable > 0 or len(high_secrets) > 0
     
-    report_lines.append("## Details")
+    # Add secrets summary if any found
+    if secrets_findings:
+        report_lines.append(f"- **🔐 Secrets Detected:** {len(secrets_findings)}")
+    
+    report_lines.append("")
+    
+    # Add secrets section first if any found
+    if secrets_findings:
+        report_lines.append(format_findings_for_report(secrets_findings))
+    
+    report_lines.append("## Code Verification Details")
     
     for r in results:
         icon = "✅"
@@ -254,6 +266,17 @@ def main():
         
     print(f"Auditing {len(critical_files)} files: {critical_files}")
     
+    # 1b. Run secrets scan on entire repo
+    print(f"\n{'='*50}")
+    print("Running Secrets Scan...")
+    print(f"{'='*50}")
+    secrets_findings = scan_repo(repo_path)
+    
+    if secrets_findings:
+        print(f"⚠️  Found {len(secrets_findings)} potential secret(s)!")
+    else:
+        print("✅ No secrets detected")
+    
     results = []
     
     # Data collection for PR creation
@@ -332,7 +355,7 @@ def main():
     print("Generating report...")
     print(f"{'='*50}")
     
-    exit_code = generate_report(results)
+    exit_code = generate_report(results, secrets_findings)
     
     # 4. Create PR if there are fixes
     if all_fixed_content:

@@ -3,7 +3,7 @@
 
 **Mathematically Verified Code Repair Powered by Gemini 3 + Lean 4**
 
-Argus is a GitHub Action that combines the creativity of **Gemini 3** with the rigor of **Lean 4 formal proofs** to automatically find AND fix security vulnerabilities in Python code.
+Argus is a GitHub Action that combines the creativity of **Gemini 3** with the rigor of **Lean 4 formal proofs** to automatically find AND fix security vulnerabilities in Python code. It also includes **Deep Secrets Detection** to catch leaked API keys and tokens.
 
 > **100% Reliable** — Not because we avoid AI, but because every AI-generated fix is **mathematically verified** before being accepted.
 
@@ -208,7 +208,17 @@ Status: AUTO_PATCHED
 
 ✅ wallet_secure.py  
 Status: SECURE
+✅ wallet_secure.py  
+Status: SECURE
 ▶ View Formal Proof (Lean 4)
+
+### 🔐 Secrets Detection
+Argus also scans for high-risk secrets:
+- **AWS & Google Keys**
+- **OpenAI & Stripe Keys**
+- **GitHub Tokens** (PAT, OAuth)
+- **Database Passwords**
+- **Generic Secrets** (High entropy strings)
 ```
 
 ---
@@ -291,8 +301,8 @@ Test files included in `demo_files/`:
 ## ⚠️ Current Limitations
 
 - **Supported patterns:** Arithmetic invariants, List membership guards, balance checks
-- **Graceful degradation:** When formal verification fails, Argus suggests unverified fixes for human review
-- **Retry logic:** Automatically tries tactic substitutions (decide, trivial, simp) before failing
+- **Guided Remediation:** When formal verification fails, Argus suggests unverified fixes for human review
+- **Secrets Scanning:** Detects 15+ types of secrets including AWS, OpenAI, GitHub, and Stripe keys
 
 ---
 

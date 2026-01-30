@@ -33,7 +33,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 9. Cache-bust: Change this version to force Docker to re-copy backend code
-ARG BUILD_VERSION=2026-01-30-v3-aesop-fix
+ARG BUILD_VERSION=2026-01-30-v4-secrets
 RUN echo "Build version: ${BUILD_VERSION}"
 
 # 10. Copy backend code (this will now always be fresh due to cache-bust above)
