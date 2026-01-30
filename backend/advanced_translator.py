@@ -132,7 +132,16 @@ Always include these imports at the top:
 import Mathlib.Tactic.SplitIfs
 import Mathlib.Data.List.Basic
 import Mathlib.Data.List.Nodup
+import Mathlib.Tactic.Linarith
 ```
+
+### 6. Tactic Strategies
+
+Use these tactics for proofs:
+- `omega` - for linear integer arithmetic
+- `linarith` - fallback for complex linear arithmetic
+- `simp` - for list simplifications
+- `split_ifs` - for if-then-else branching
 
 ## OUTPUT FORMAT
 
