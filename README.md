@@ -307,6 +307,7 @@ Test files included in `demo_files/`:
 | `inventory_manager.py` | No duplicate check | AUTO_PATCHED |
 | `orderProcessor.py` | Missing stock validation | AUTO_PATCHED |
 | `config_with_secrets.py` | Hardcoded API keys | SECRETS_DETECTED |
+| `credit_system.py` | Missing credit limit check | AUTO_PATCHED |
 
 ---
 
