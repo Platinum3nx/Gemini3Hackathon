@@ -191,6 +191,25 @@ jobs:
 
 Argus will automatically audit Python files, fix vulnerabilities, and open a PR with verified fixes.
 
+### 4. Configuration (.argusignore)
+
+To prevent Argus from auditing specific files (e.g., legacy code, tests, or auto-generated files), create an `.argusignore` file in your repository root. It works exactly like `.gitignore`.
+
+Example `.argusignore`:
+```text
+# Ignore legacy modules
+legacy_module/
+old_script.py
+
+# Ignore tests
+tests/
+*_test.py
+
+# Ignore generated code
+generated/
+*.gen.py
+```
+
 ---
 
 ## 📊 Example Output
