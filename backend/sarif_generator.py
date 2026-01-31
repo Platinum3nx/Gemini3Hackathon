@@ -11,6 +11,37 @@ import json
 import os
 from typing import List, Dict, Any
 
+def clean_lean_error(lean_message: str) -> str:
+    """
+    Clean raw Lean error output to show only human-readable explanations.
+    
+    Removes:
+    - Imports
+    - Raw Lean definitions/theorems
+    - 'sorry' keywords
+    
+    Keeps:
+    - Lines starting with '--' (comments explaining the error)
+    """
+    lines = lean_message.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        stripped = line.strip()
+        # Keep comments (where the explanation lives)
+        if stripped.startswith("--"):
+            # Remove the comment marker for cleaner output
+            cleaned_lines.append(stripped[2:].strip())
+    
+    if not cleaned_lines:
+        # If no comments found, return the last few lines as fallback (usually contain the error)
+        # But filter out imports/defs
+        fallback = [l for l in lines[-5:] if not l.startswith("import") and not l.startswith("def")]
+        return "\n".join(fallback)
+        
+    return "\n".join(cleaned_lines)
+
+
 def generate_sarif(results: List[Dict[str, Any]], secrets_findings: List[Any], repo_path: str = ".") -> Dict[str, Any]:
     """
     Generate a SARIF report from Argus audit results.
@@ -92,7 +123,7 @@ def generate_sarif(results: List[Dict[str, Any]], secrets_findings: List[Any], r
             result_item = {
                 "ruleId": "ARGUS001",
                 "message": {
-                    "text": f"Argus Logic Audit: {message}"
+                    "text": f"Argus Logic Audit:\n\n{clean_lean_error(message)}"
                 },
                 "level": "error",
                 "locations": [
