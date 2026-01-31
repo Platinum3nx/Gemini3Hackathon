@@ -18,6 +18,7 @@ from backend import agents
 from backend.ai_repair import generate_fix
 from backend.github_service import GitHubService
 from backend.secrets_scanner import scan_repo, format_findings_for_report
+from backend.sarif_generator import generate_sarif
 
 
 def attempt_repair(filename: str, original_code: str, lean_error: str, repo_path: str) -> dict:
@@ -356,6 +357,17 @@ def main():
     print(f"{'='*50}")
     
     exit_code = generate_report(results, secrets_findings)
+    
+    # 3b. Generate SARIF output
+    print("Generating SARIF output...")
+    try:
+        sarif_data = generate_sarif(results, secrets_findings, repo_path)
+        sarif_file = os.path.join(repo_path, "argus_results.sarif")
+        with open(sarif_file, "w") as f:
+            json.dump(sarif_data, f, indent=2)
+        print(f"SARIF report written to: {sarif_file}")
+    except Exception as e:
+        print(f"Error generating SARIF report: {e}")
     
     # 4. Create PR if there are fixes
     if all_fixed_content:

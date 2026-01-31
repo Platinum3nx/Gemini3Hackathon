@@ -221,6 +221,17 @@ Argus also scans for high-risk secrets:
 - **Generic Secrets** (High entropy strings)
 ```
 
+### 🛡️ GitHub Security Tab Integration
+Argus generates a SARIF report (`argus_results.sarif`) compatible with GitHub Code Scanning.
+To see results in the **Security** tab, add this step to your workflow:
+
+```yaml
+- name: Upload SARIF file
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: argus_results.sarif
+```
+
 ---
 
 ## 🏗️ Architecture Components
