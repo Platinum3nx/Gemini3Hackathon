@@ -5,6 +5,7 @@ import git
 import subprocess
 from typing import List
 from . import agents
+import pathspec
 
 def clone_repo(repo_url: str) -> str:
     """
@@ -21,12 +22,31 @@ def clone_repo(repo_url: str) -> str:
         shutil.rmtree(temp_dir)
         raise e
 
+def load_argusignore(repo_path: str) -> pathspec.PathSpec:
+    """
+    Loads .argusignore from the repo root and returns a PathSpec object.
+    Returns an empty PathSpec if the file doesn't exist.
+    """
+    ignore_path = os.path.join(repo_path, '.argusignore')
+    if os.path.exists(ignore_path):
+        try:
+            with open(ignore_path, 'r') as f:
+                return pathspec.PathSpec.from_lines('gitwildmatch', f)
+        except Exception as e:
+            print(f"Error loading .argusignore: {e}")
+            
+    return pathspec.PathSpec.from_lines('gitwildmatch', [])
+
 def get_all_python_files(repo_path: str) -> List[str]:
     """
-    Walks the directory and returns a list of .py files, ignoring standard ignored dirs.
+    Walks the directory and returns a list of .py files, ignoring standard ignored dirs AND .argusignore patterns.
     """
     py_files = []
+    # Hardcoded critical ignores - these are always skipped for performance/safety
     ignore_dirs = {'.git', '__pycache__', 'venv', 'env', 'node_modules', 'tests', 'test', 'docs'}
+    
+    # Load user-defined ignores
+    spec = load_argusignore(repo_path)
     
     for root, dirs, files in os.walk(repo_path):
         # Modify dirs in-place to skip ignored directories
@@ -37,7 +57,10 @@ def get_all_python_files(repo_path: str) -> List[str]:
                 full_path = os.path.join(root, file)
                 # Store relative path for cleaner agent consumption
                 rel_path = os.path.relpath(full_path, start=repo_path)
-                py_files.append(rel_path)
+                
+                # Check against .argusignore
+                if not spec.match_file(rel_path):
+                    py_files.append(rel_path)
                 
     return py_files
 
@@ -60,9 +83,13 @@ def get_changed_files(repo_path: str) -> List[str]:
         
         # Filter for .py files that currently exist
         valid_files = []
+        spec = load_argusignore(repo_path)
+        
         for f in changed_files:
             if f.endswith('.py') and os.path.exists(os.path.join(repo_path, f)):
-                valid_files.append(f)
+                # Check against .argusignore
+                if not spec.match_file(f):
+                    valid_files.append(f)
                 
         print(f"Incremental scan identified {len(valid_files)} changed Python files.")
         return valid_files
