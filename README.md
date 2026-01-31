@@ -168,6 +168,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() # Upload even if issues are found
+        with:
+          sarif_file: argus_results.sarif
 ```
 
 > **Feature Branch Support:** Argus automatically detects your current branch (e.g., `feat/login`) and opens fix PRs targeting that branch, not `main`. This lets you fix vulnerabilities directly on feature branches before merging.
